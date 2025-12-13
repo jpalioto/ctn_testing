@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ctn-testing"
+version = "0.1.0"
+description = "CTN kernel evaluation framework"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+dependencies = [
+    "pyyaml>=6.0",
+    "scipy>=1.11",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+]
+anthropic = [
+    "anthropic>=0.40",
+]
+google = [
+    "google-generativeai>=0.8",
+]
+openai = [
+    "openai>=1.50",
+]
+all = [
+    "anthropic>=0.40",
+    "google-generativeai>=0.8",
+    "openai>=1.50",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ctn_testing*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

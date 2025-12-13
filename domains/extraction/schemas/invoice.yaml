@@ -1,0 +1,28 @@
+name: invoice
+description: Standard invoice document fields
+
+fields:
+  - name: invoice_number
+    description: Unique identifier for the invoice
+    type: string
+    required: true
+
+  - name: invoice_date
+    description: Date the invoice was issued
+    type: date
+    required: true
+
+  - name: due_date
+    description: Payment due date
+    type: date
+    required: true
+
+  - name: total_amount
+    description: Total amount due including tax
+    type: currency
+    required: true
+
+  - name: vendor_name
+    description: Name of the company issuing the invoice
+    type: string
+    required: true

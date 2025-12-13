@@ -1,0 +1,115 @@
+name: "Phase 1: Practical"
+version: "1.0"
+
+documents:
+  source: synthetic
+  per_set: 100
+  types:
+    - name: invoice
+      count_per_set: 25
+      difficulties: [easy, medium, hard, adversarial]
+    - name: contract
+      count_per_set: 20
+      difficulties: [easy, medium, hard, adversarial]
+    - name: medical
+      count_per_set: 20
+      difficulties: [easy, medium, hard, adversarial]
+    - name: receipt
+      count_per_set: 20
+      difficulties: [easy, medium, hard, adversarial]
+    - name: resume
+      count_per_set: 15
+      difficulties: [easy, medium, hard, adversarial]
+
+models:
+  - provider: anthropic
+    name: claude-sonnet-4-5
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+    reasoning: true
+    max_reasoning_tokens: 0
+
+  - provider: google
+    name: gemini-2.5-flash
+    api_key_env: GEMINI_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+    reasoning: true
+    max_reasoning_tokens: 0
+
+judge_models:
+  - provider: google
+    name: gemini-2.5-flash-lite
+    api_key_env: GEMINI_API_KEY
+    temperature: 0.0
+    max_tokens: 256
+    reasoning: false
+    max_reasoning_tokens: 0
+
+  - provider: anthropic
+    name: claude-haiku-4-5
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 256
+    reasoning: false
+    max_reasoning_tokens: 0
+
+judge_policy: match_provider
+
+kernels:
+  - name: ctn
+    path: kernels/ctn.txt
+    enabled: true
+  - name: idiomatic
+    path: kernels/idiomatic.txt
+    enabled: true
+  - name: null_baseline
+    path: __null__
+    enabled: true
+
+comparisons:
+  - a: ctn
+    b: idiomatic
+    primary: true
+    within: model
+  - a: ctn
+    b: null_baseline
+    primary: false
+    within: model
+
+metrics:
+  primary:
+    - value_accuracy
+    - evidence_validity
+    - hallucination_rate
+    - fabrication_rate
+  secondary:
+    - page_accuracy
+    - status_accuracy
+    - schema_compliance
+    - quote_coverage
+  composite_weights:
+    value: 0.30
+    evidence: 0.30
+    page: 0.10
+    status: 0.15
+    schema: 0.15
+
+statistics:
+  method: paired_ttest
+  alpha: 0.05
+  correction: none
+  cluster_by: document
+
+execution:
+  delay: 0.3
+  retries: 3
+  timeout: 60
+  parallel: false
+  max_workers: 4
+
+output:
+  results_dir: results/phase1
+  save_raw: true
+  generate_report: true

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Data (structure committed, content not)
+domains/*/data/dev/documents/*
+domains/*/data/dev/ground_truth/*
+domains/*/data/test/documents/*
+domains/*/data/test/ground_truth/*
+!domains/*/data/**/.gitkeep
+
+# Results
+domains/*/results/
+
+# Environment
+.env
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
