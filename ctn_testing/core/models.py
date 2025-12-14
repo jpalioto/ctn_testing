@@ -81,7 +81,7 @@ class AnthropicClient(ModelClient):
             messages=[{"role": "user", "content": prompt}]
         )
         return CompletionResult(
-            text=response.content[0].text,
+            text=response.content[0].text if hasattr(response.content[0], 'text') else str(response.content[0]),
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
             model=self._config.name
@@ -96,16 +96,16 @@ class GoogleClient(ModelClient):
     
     def _get_client(self):
         if self._client is None:
-            import google.generativeai as genai
-            genai.configure(api_key=self._config.get_api_key())
-            self._client = genai.GenerativeModel(self._config.name)
+            from google import genai
+            self._client = genai.Client(api_key=self._config.get_api_key())
         return self._client
     
     def complete(self, prompt: str) -> CompletionResult:
         client = self._get_client()
-        response = client.generate_content(
-            prompt,
-            generation_config={
+        response = client.models.generate_content(
+            model=self._config.name,
+            contents=prompt,
+            config={
                 "temperature": self._config.temperature,
                 "max_output_tokens": self._config.max_tokens,
             }
