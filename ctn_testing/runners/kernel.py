@@ -82,7 +82,7 @@ class NullBaseline(Kernel):
         """Direct extraction without LLM call."""
         return [
             Extraction(
-                field=f.name,
+                field_name=f.name,
                 value=None,
                 evidence=Evidence(quote=None, page=None),
                 status=ExtractionStatus.MISSING,

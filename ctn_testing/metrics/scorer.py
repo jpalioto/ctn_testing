@@ -136,7 +136,7 @@ def evidence_validity(
     token_score = max(0.0, min(1.0, 1.0 - (token_ratio - 5) * 0.1))
     
     if judge_fn is not None:
-        judge_score = judge_fn(quote, ext.field, value)
+        judge_score = judge_fn(quote, ext.field_name, value)
         return 0.3 * token_score + 0.7 * judge_score
     
     return token_score
@@ -209,7 +209,7 @@ def page_accuracy(ext: Extraction, gt: GroundTruth, pages: list[str]) -> float:
 
 def is_valid_schema(ext: Extraction) -> bool:
     """Check if extraction has valid schema structure."""
-    if ext.field is None:
+    if ext.field_name is None:
         return False
     if ext.status == ExtractionStatus.OK:
         return ext.evidence.quote is not None and ext.evidence.page is not None

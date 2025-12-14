@@ -1,0 +1,14 @@
+{
+    "include": ["ctn_testing"],
+    "exclude": ["**/__pycache__", ".venv"],
+    "reportMissingImports": "warning",
+    "reportMissingModuleSource": "none",
+    "reportOptionalMemberAccess": "warning",
+    "reportUnusedImport": "error",
+    "reportUnusedVariable": "error",
+    "reportUnboundVariable": "error",
+    "reportGeneralTypeIssues": "error",
+    "reportAttributeAccessIssue": "warning",
+    "pythonVersion": "3.13",
+    "typeCheckingMode": "basic"
+}

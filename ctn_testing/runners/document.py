@@ -69,7 +69,7 @@ class DocumentWithGroundTruth:
         ground_truth = {}
         for field_name, field_data in gt_data.get("fields", {}).items():
             ground_truth[field_name] = GroundTruth(
-                field=field_name,
+                field_name=field_name,
                 exists_in_document=field_data.get("exists", True),
                 is_ambiguous=field_data.get("ambiguous", False),
                 value=field_data.get("value"),

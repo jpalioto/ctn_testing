@@ -9,7 +9,7 @@ import json
 @dataclass
 class FieldResult:
     """Result for a single field extraction."""
-    field: str
+    field_name: str
     extracted_value: Any
     expected_value: Any
     quote: str | None
@@ -69,7 +69,7 @@ class DocumentResult:
             "error": self.error,
             "fields": [
                 {
-                    "field": f.field,
+                    "field": f.field_name,
                     "extracted": f.extracted_value,
                     "expected": f.expected_value,
                     "quote": f.quote,

@@ -10,11 +10,10 @@ from ..core import (
     ModelConfig,
     get_client,
     DocumentSchema,
-    FieldSchema,
 )
 from ..metrics import composite_score
 from .document import DocumentWithGroundTruth, load_document_set
-from .kernel import Kernel, TextKernel, NullBaseline, load_kernel, OUTPUT_FORMAT
+from .kernel import Kernel, NullBaseline, load_kernel, OUTPUT_FORMAT
 from .results import RunResults, DocumentResult, FieldResult
 
 
@@ -45,7 +44,7 @@ class Runner:
         self._verbose = run_config.verbose
         
         self._results: RunResults | None = None
-        self._clients: dict[str, any] = {}
+        self._clients: dict[str, Any] = {}
         self._kernels: dict[str, Kernel] = {}
     
     def _log(self, msg: str):
@@ -95,7 +94,7 @@ class Runner:
             field_results = []
             
             for ext in extractions:
-                gt = doc.ground_truth.get(ext.field)
+                gt = doc.ground_truth.get(ext.field_name)
                 if not gt:
                     continue
                 
@@ -104,7 +103,7 @@ class Runner:
                 )
                 
                 field_results.append(FieldResult(
-                    field=ext.field,
+                    field_name=ext.field_name,
                     extracted_value=ext.value,
                     expected_value=gt.value,
                     quote=ext.evidence.quote,
@@ -160,7 +159,7 @@ class Runner:
             )
         
         # Build extraction lookup
-        ext_by_field = {e.field: e for e in extractions}
+        ext_by_field = {e.field_name: e for e in extractions}
         
         # Score each field
         field_results = []
@@ -171,7 +170,7 @@ class Runner:
                 # Field was omitted - create a miss
                 from ..core.types import Extraction, Evidence, ExtractionStatus
                 ext = Extraction(
-                    field=field_name,
+                    field_name=field_name,
                     value=None,
                     evidence=Evidence(quote=None, page=None),
                     status=ExtractionStatus.MISSING,
@@ -183,7 +182,7 @@ class Runner:
             )
             
             field_results.append(FieldResult(
-                field=field_name,
+                field_name=field_name,
                 extracted_value=ext.value,
                 expected_value=gt.value,
                 quote=ext.evidence.quote,

@@ -15,7 +15,7 @@ from ctn_testing.metrics.scorer import composite_score
 
 
 def make_ext(
-    field="total",
+    field_name="total",
     value=None,
     quote=None,
     page=None,
@@ -23,7 +23,7 @@ def make_ext(
     candidates=None
 ) -> Extraction:
     return Extraction(
-        field=field,
+        field_name=field_name,
         value=value,
         evidence=Evidence(quote=quote, page=page),
         status=ExtractionStatus(status),
@@ -32,14 +32,14 @@ def make_ext(
 
 
 def make_gt(
-    field="total",
+    field_name="total",
     exists=True,
     ambiguous=False,
     value=None,
     candidate_values=None
 ) -> GroundTruth:
     return GroundTruth(
-        field=field,
+        field_name=field_name,
         exists_in_document=exists,
         is_ambiguous=ambiguous,
         value=value,
@@ -86,14 +86,14 @@ class TestScorerAdversarial:
         pages = [doc]
         
         gt = make_gt(
-            field="effective_date",
+            field_name="effective_date",
             exists=True,
             ambiguous=True,
             candidate_values=["2024-01-15", "2024-02-01"]
         )
         
         ext = make_ext(
-            field="effective_date",
+            field_name="effective_date",
             value=None,
             status="ambiguous",
             candidates=[
@@ -113,7 +113,7 @@ class TestScorerAdversarial:
         pages = [doc]
         
         gt = make_gt(
-            field="date",
+            field_name="date",
             exists=True,
             ambiguous=True,
             candidate_values=["2024-01-15", "2024-02-01"]

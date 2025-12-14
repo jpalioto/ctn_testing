@@ -111,9 +111,9 @@ class GoogleClient(ModelClient):
             }
         )
         return CompletionResult(
-            text=response.text,
-            input_tokens=response.usage_metadata.prompt_token_count if response.usage_metadata else 0,
-            output_tokens=response.usage_metadata.candidates_token_count if response.usage_metadata else 0,
+            text=response.text or "",
+            input_tokens=(response.usage_metadata.prompt_token_count or 0) if response.usage_metadata else 0,
+            output_tokens=(response.usage_metadata.candidates_token_count or 0) if response.usage_metadata else 0,
             model=self._config.name
         )
 

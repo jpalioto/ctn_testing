@@ -31,7 +31,7 @@ class Candidate:
 
 @dataclass
 class Extraction:
-    field: str
+    field_name: str
     value: Any
     evidence: Evidence
     status: ExtractionStatus
@@ -55,7 +55,7 @@ class Extraction:
         ]
         
         return cls(
-            field=d["field"],
+            field_name=d["field"],
             value=d.get("value"),
             evidence=Evidence(
                 quote=ev.get("quote"),
@@ -69,7 +69,7 @@ class Extraction:
 
 @dataclass
 class GroundTruth:
-    field: str
+    field_name: str
     exists_in_document: bool
     is_ambiguous: bool = False
     value: Any = None

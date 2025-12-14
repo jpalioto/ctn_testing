@@ -64,24 +64,24 @@ SCHEMA = DocumentSchema(
 # Ground truth
 GROUND_TRUTH = {
     "invoice_number": GroundTruth(
-        field="invoice_number",
+        field_name="invoice_number",
         exists_in_document=True,
         value="INV-2024-0042",
     ),
     "total_amount": GroundTruth(
-        field="total_amount",
+        field_name="total_amount",
         exists_in_document=True,
         value="$220.00",
         acceptable_values=["$220.00", "220.00", "220"],
     ),
     "due_date": GroundTruth(
-        field="due_date",
+        field_name="due_date",
         exists_in_document=True,
         value="January 13, 2025",
         acceptable_values=["January 13, 2025", "2025-01-13", "01/13/2025"],
     ),
     "vendor_name": GroundTruth(
-        field="vendor_name",
+        field_name="vendor_name",
         exists_in_document=True,
         value="TechSupply Co.",
         acceptable_values=["TechSupply Co.", "TechSupply Co", "TechSupply"],
@@ -182,16 +182,16 @@ def run_smoke_test():
     
     total_composite = 0.0
     for ext in extractions:
-        gt = GROUND_TRUTH.get(ext.field)
+        gt = GROUND_TRUTH.get(ext.field_name)
         if not gt:
-            print(f"  {ext.field}: [SKIP] No ground truth")
+            print(f"  {ext.field_name}: [SKIP] No ground truth")
             continue
         
         score = composite_score(ext, gt, DOCUMENT, PAGES)
         total_composite += score.composite
         
         status = "✓" if score.value == 1.0 else "✗"
-        print(f"  {ext.field}:")
+        print(f"  {ext.field_name}:")
         print(f"    Extracted: {ext.value}")
         print(f"    Expected:  {gt.value}")
         print(f"    Value: {score.value:.2f} | Evidence: {score.evidence:.2f} | Page: {score.page:.2f}")
