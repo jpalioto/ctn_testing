@@ -1,5 +1,6 @@
 """Result storage and aggregation."""
 from dataclasses import dataclass, field
+from ..statistics.comparison import paired_comparison, ComparisonResult
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -35,14 +36,11 @@ class DocumentResult:
     model: str
     kernel: str
     fields: list[FieldResult]
-    
-    # Timing
     latency_ms: float = 0.0
     input_tokens: int = 0
     output_tokens: int = 0
-    
-    # Errors
     error: str | None = None
+    cache_prefix: str | None = None
     
     @property
     def composite_score(self) -> float:
@@ -66,6 +64,7 @@ class DocumentResult:
             "latency_ms": self.latency_ms,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "cache_prefix": self.cache_prefix,
             "error": self.error,
             "fields": [
                 {
@@ -122,6 +121,16 @@ class RunResults:
         results = sorted(self.by_model_kernel(model, kernel), key=lambda r: r.doc_id)
         return [r.composite_score for r in results]
     
+    def compare(self, model: str, kernel_a: str, kernel_b: str) -> ComparisonResult | None:
+        """Compare two kernels for a given model using paired t-test."""
+        scores_a = self.composite_scores(model, kernel_a)
+        scores_b = self.composite_scores(model, kernel_b)
+    
+        if len(scores_a) < 2 or len(scores_a) != len(scores_b):
+            return None
+    
+        return paired_comparison(scores_a, scores_b)
+    
     def summary(self) -> dict:
         """Generate summary statistics."""
         if not self.results:
@@ -139,8 +148,9 @@ class RunResults:
             "models": list(models),
             "kernels": list(kernels),
             "by_model_kernel": {},
-        }
         
+        }
+        summary["comparisons"] = {}
         for model in models:
             for kernel in kernels:
                 results = self.by_model_kernel(model, kernel)
@@ -160,7 +170,7 @@ class RunResults:
                     "value_mean": sum(value_scores) / len(value_scores),
                     "errors": len(errors),
                 }
-        
+
         return summary
     
     def save(self, output_dir: Path):

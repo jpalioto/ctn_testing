@@ -16,6 +16,15 @@ from .document import DocumentWithGroundTruth, load_document_set
 from .kernel import Kernel, NullBaseline, load_kernel, OUTPUT_FORMAT
 from .results import RunResults, DocumentResult, FieldResult
 
+# Zero-width characters for cache busting (invisible, deterministic)
+# each test runs has one of these characters added to the top of the file
+# the purpose of which is to invalidate any implicit chaching done by the model
+# this was done in reposne to the observation that certain models seemed to 
+# improve after our first run even though we were not explicitly caching.
+# This is done for all models reagardless of implicit caching on the model
+# side for uniformity. 
+ZW_CHARS = ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff']
+ZW_NAMES = ['ZWSP', 'ZWNJ', 'ZWJ', 'WJ', 'BOM']
 
 @dataclass
 class RunConfig:
@@ -46,6 +55,8 @@ class Runner:
         self._results: RunResults | None = None
         self._clients: dict[str, Any] = {}
         self._kernels: dict[str, Kernel] = {}
+
+        self._test_index = 0
     
     def _log(self, msg: str):
         if self._verbose:
@@ -119,20 +130,25 @@ class Runner:
             
             return DocumentResult(
                 doc_id=doc.document.id,
-                model="null_baseline",
+                model=model.name,
                 kernel=kernel.name,
                 fields=field_results,
             )
         
-        # Render prompt
         prompt = kernel.render(self._schema, doc.document.text, OUTPUT_FORMAT)
+
+        # Cache-bust prefix (deterministic, logged)
+        prefix_idx = self._test_index % len(ZW_CHARS)
+        prefix_char = ZW_CHARS[prefix_idx]
+        prefix_name = ZW_NAMES[prefix_idx]
+        self._test_index += 1
+        salted_prompt_text = prefix_char + prompt.text
         
-        # Call model
         client = self._get_client(model)
         start_time = time.time()
         
         try:
-            result = client.complete(prompt.text)
+            result = client.complete(salted_prompt_text)
             latency_ms = (time.time() - start_time) * 1000
         except Exception as e:
             return DocumentResult(
@@ -141,9 +157,9 @@ class Runner:
                 kernel=kernel.name,
                 fields=[],
                 error=str(e),
+                cache_prefix=prefix_name,
             )
         
-        # Parse response
         try:
             extractions = kernel.parse_response(result.text)
         except Exception as e:
@@ -156,18 +172,16 @@ class Runner:
                 input_tokens=result.input_tokens,
                 output_tokens=result.output_tokens,
                 error=f"Parse error: {e}",
+                cache_prefix=prefix_name,
             )
         
-        # Build extraction lookup
         ext_by_field = {e.field_name: e for e in extractions}
         
-        # Score each field
         field_results = []
         for field_name, gt in doc.ground_truth.items():
             ext = ext_by_field.get(field_name)
             
             if ext is None:
-                # Field was omitted - create a miss
                 from ..core.types import Extraction, Evidence, ExtractionStatus
                 ext = Extraction(
                     field_name=field_name,
@@ -204,6 +218,7 @@ class Runner:
             latency_ms=latency_ms,
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
+            cache_prefix=prefix_name,
         )
     
     def run(self) -> RunResults:
@@ -264,8 +279,16 @@ class Runner:
             self._log(f"{model} × {kernel}:")
             self._log(f"  Composite: {stats['composite_mean']:.3f} (min={stats['composite_min']:.2f}, max={stats['composite_max']:.2f})")
             self._log(f"  Value:     {stats['value_mean']:.3f}")
-            if stats['errors'] > 0:
-                self._log(f"  Errors:    {stats['errors']}")
+            
+            if summary.get("comparisons"):
+                self._log("\nCOMPARISONS (CTN vs Idiomatic):")
+                for key, comp in summary["comparisons"].items():
+                    model = key.split("|")[0]
+                    self._log(f"  {model}:")
+                    self._log(f"    Δ = {comp['mean_diff']:+.3f} ({comp['effect_interpretation']} effect)")
+                    self._log(f"    p = {comp['p_value']:.3f}, n = {comp['n']}")
+                if stats['errors'] > 0:
+                    self._log(f"  Errors:    {stats['errors']}")
         
         return self._results
 
