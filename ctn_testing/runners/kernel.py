@@ -1,4 +1,5 @@
 """Kernel loading and prompt rendering."""
+from ..core.schemas import parse_llm_response
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -91,9 +92,9 @@ class NullBaseline(Kernel):
             for f in self._schema.fields
         ]
     
-    def parse_response(self, response: str) -> list[Extraction]:
-        raise NotImplementedError("NullBaseline doesn't use LLM")
-
+def parse_response(self, response: str) -> list[Extraction]:
+    """Parse LLM response into extractions."""
+    return parse_llm_response(response)
 
 def load_kernel(path: Path, schema: DocumentSchema) -> Kernel:
     """Load kernel from path. Special-cases null_baseline."""

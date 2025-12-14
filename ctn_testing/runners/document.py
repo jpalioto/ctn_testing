@@ -5,6 +5,7 @@ import json
 import yaml
 
 from ..core.types import GroundTruth
+from ..core.schemas import GroundTruthDocumentSchema, ground_truth_from_schema
 
 
 @dataclass
@@ -66,7 +67,12 @@ class DocumentWithGroundTruth:
             else:
                 gt_data = json.load(f)
         
-        ground_truth = {}
+        gt_validated = GroundTruthDocumentSchema.model_validate(gt_data)
+        ground_truth = {
+            name: ground_truth_from_schema(name, field_schema)
+            for name, field_schema in gt_validated.fields.items()
+        }
+        
         for field_name, field_data in gt_data.get("fields", {}).items():
             ground_truth[field_name] = GroundTruth(
                 field_name=field_name,

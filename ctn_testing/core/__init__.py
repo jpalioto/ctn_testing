@@ -23,6 +23,14 @@ from .config import (
     ComparisonConfig,
     DocumentConfig,
 )
+from .schemas import (
+    parse_llm_response,
+    ExtractionSchema,
+    ExtractionsResponseSchema,
+    GroundTruthFieldSchema,
+    GroundTruthDocumentSchema,
+    ground_truth_from_schema,
+)
 
 __all__ = [
     # Types
@@ -46,4 +54,11 @@ __all__ = [
     "KernelConfig",
     "ComparisonConfig",
     "DocumentConfig",
+    # Schema
+    "parse_llm_response",
+    "ExtractionSchema",
+    "ExtractionsResponseSchema",
+    "GroundTruthFieldSchema",
+    "GroundTruthDocumentSchema",
+    "ground_truth_from_schema",
 ]
