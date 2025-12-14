@@ -170,6 +170,20 @@ class RunResults:
                     "value_mean": sum(value_scores) / len(value_scores),
                     "errors": len(errors),
                 }
+                
+            if "ctn" in kernels and "idiomatic" in kernels:
+                result = self.compare(model, "ctn", "idiomatic")
+                if result:
+                    summary["comparisons"][f"{model}|ctn_vs_idiomatic"] = {
+                        "mean_diff": result.mean_diff,
+                        "p_value": result.p_value,
+                        "effect_size": result.effect_size,
+                        "effect_interpretation": result.effect_interpretation,
+                        "significant": result.significant_at_05,
+                        "ci_lower": result.ci_lower,
+                        "ci_upper": result.ci_upper,
+                        "n": result.n,
+                    }
 
         return summary
     

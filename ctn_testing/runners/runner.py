@@ -231,17 +231,14 @@ class Runner:
             started_at=datetime.now(),
         )
         
-        # Load documents
         self._log(f"Loading documents from {self._data_dir}...")
         documents = load_document_set(self._data_dir)
         self._log(f"  Loaded {len(documents)} documents")
         
-        # Build run matrix
         matrix = self._config.run_matrix()
         total_runs = len(matrix) * len(documents)
         self._log(f"Run matrix: {len(matrix)} model×kernel pairs × {len(documents)} docs = {total_runs} evaluations")
         
-        # Execute
         completed = 0
         for model, kernel_config in matrix:
             kernel = self._get_kernel(kernel_config.name, kernel_config.path)
@@ -259,17 +256,14 @@ class Runner:
                 
                 completed += 1
                 
-                # Rate limiting
                 if self._config.execution.delay > 0:
                     time.sleep(self._config.execution.delay)
         
         self._results.completed_at = datetime.now()
         
-        # Save results
         self._log(f"\nSaving results to {self._output_dir}...")
         self._results.save(self._output_dir / f"run_{run_id}")
         
-        # Print summary
         self._log("\n" + "=" * 60)
         self._log("SUMMARY")
         self._log("=" * 60)
@@ -279,16 +273,17 @@ class Runner:
             self._log(f"{model} × {kernel}:")
             self._log(f"  Composite: {stats['composite_mean']:.3f} (min={stats['composite_min']:.2f}, max={stats['composite_max']:.2f})")
             self._log(f"  Value:     {stats['value_mean']:.3f}")
-            
-            if summary.get("comparisons"):
-                self._log("\nCOMPARISONS (CTN vs Idiomatic):")
-                for key, comp in summary["comparisons"].items():
-                    model = key.split("|")[0]
-                    self._log(f"  {model}:")
-                    self._log(f"    Δ = {comp['mean_diff']:+.3f} ({comp['effect_interpretation']} effect)")
-                    self._log(f"    p = {comp['p_value']:.3f}, n = {comp['n']}")
-                if stats['errors'] > 0:
-                    self._log(f"  Errors:    {stats['errors']}")
+            if stats['errors'] > 0:
+                self._log(f"  Errors:    {stats['errors']}")
+        
+        if summary.get("comparisons"):
+            self._log("\n" + "-" * 40)
+            self._log("COMPARISONS (CTN vs Idiomatic):")
+            for comp_key, comp in summary["comparisons"].items():
+                model = comp_key.split("|")[0]
+                self._log(f"  {model}:")
+                self._log(f"    Δ = {comp['mean_diff']:+.3f} ({comp['effect_interpretation']} effect)")
+                self._log(f"    p = {comp['p_value']:.3f}, n = {comp['n']}")
         
         return self._results
 
