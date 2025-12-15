@@ -1,0 +1,13 @@
+{
+    "id": "invoice_001",
+    "doc_type": "invoice",
+    "difficulty": "easy",
+    "text": "INVOICE\n\nInvoice Number: INV-2024-0042\nDate: December 13, 2024\nDue Date: January 13, 2025\n\nBill To:\nAcme Corporation\n123 Main Street\n\nFrom:\nTechSupply Co.\n\nItems:\n- Widget A (qty 10) - $100.00\n- Widget B (qty 5) - $75.00\n- Shipping - $25.00\n\nSubtotal: $200.00\nTax (10%): $20.00\nTotal Amount Due: $220.00\n\nPayment Terms: Net 30",
+    "pages": [
+        "INVOICE\n\nInvoice Number: INV-2024-0042\nDate: December 13, 2024\nDue Date: January 13, 2025\n\nBill To:\nAcme Corporation\n123 Main Street\n\nFrom:\nTechSupply Co.\n\nItems:\n- Widget A (qty 10) - $100.00\n- Widget B (qty 5) - $75.00\n- Shipping - $25.00\n\nSubtotal: $200.00\nTax (10%): $20.00\nTotal Amount Due: $220.00\n\nPayment Terms: Net 30"
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Clean, straightforward invoice for baseline testing"
+    }
+}

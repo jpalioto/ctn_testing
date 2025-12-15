@@ -36,7 +36,7 @@ def main():
     )
     parser.add_argument(
         "--data",
-        choices=["dev", "test"],
+        choices=["dev", "dev_quick", "dev_full", "test"],
         default="dev",
         help="Which dataset to use (default: dev)",
     )

@@ -1,0 +1,13 @@
+{
+    "id": "invoice_003",
+    "doc_type": "invoice",
+    "difficulty": "easy",
+    "text": "INVOICE #INV-5521\n\nDate Issued: November 1, 2024\nPayment Due: December 1, 2024\n\nVendor: GlobalTech Solutions\n456 Commerce Blvd\nSuite 200\n\nBill To:\nSmith Industries\n789 Industrial Way\n\nDescription              Qty    Price\n-----------------------------------------\nConsulting Services       8hr    $1,200.00\nSoftware License          1      $500.00\nSupport Package           1      $300.00\n\nTotal: $2,000.00\n\nThank you for your business!",
+    "pages": [
+        "INVOICE #INV-5521\n\nDate Issued: November 1, 2024\nPayment Due: December 1, 2024\n\nVendor: GlobalTech Solutions\n456 Commerce Blvd\nSuite 200\n\nBill To:\nSmith Industries\n789 Industrial Way\n\nDescription              Qty    Price\n-----------------------------------------\nConsulting Services       8hr    $1,200.00\nSoftware License          1      $500.00\nSupport Package           1      $300.00\n\nTotal: $2,000.00\n\nThank you for your business!"
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Easy - all fields clearly labeled"
+    }
+}

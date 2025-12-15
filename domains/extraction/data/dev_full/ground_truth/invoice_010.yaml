@@ -1,0 +1,27 @@
+fields:
+  invoice_number:
+    exists: true
+    ambiguous: false
+    value: "PH-29481"
+    quote: "Account Number: PH-29481"
+    page: 1
+  total_amount:
+    exists: true
+    ambiguous: false
+    value: "$1,025.00"
+    quote: "Patient Responsibility:          $1,025.00"
+    page: 2
+  due_date:
+    exists: true
+    ambiguous: false
+    value: "February 5, 2025"
+    quote: "PLEASE PAY BY: February 5, 2025"
+    page: 2
+  vendor_name:
+    exists: true
+    ambiguous: true
+    value: "Premium Healthcare Partners"
+    acceptable_values: ["Premium Healthcare Partners", "Consolidated Billing Services"]
+    candidate_values: ["Premium Healthcare Partners", "Consolidated Billing Services"]
+    quote: "On behalf of: Premium Healthcare Partners"
+    page: 1

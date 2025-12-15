@@ -1,0 +1,13 @@
+{
+    "id": "invoice_006",
+    "doc_type": "invoice",
+    "difficulty": "medium",
+    "text": "QUICKSHIP LOGISTICS\nInvoice\n\nInvoice #: QS-2024-1156\nOrder Date: August 5, 2024\nShip Date: August 7, 2024\nInvoice Date: August 8, 2024\nTerms: Net 15\n\nShip To:\nWarehouse Direct\n555 Distribution Center\n\nOrder Details:\n  Express Shipping (2-day)    $89.00\n  Insurance                   $12.00\n  Fuel Surcharge              $8.50\n\nInvoice Total: $109.50\n\nPayment expected by: August 23, 2024\n\nQuestions? Call 1-800-555-SHIP",
+    "pages": [
+        "QUICKSHIP LOGISTICS\nInvoice\n\nInvoice #: QS-2024-1156\nOrder Date: August 5, 2024\nShip Date: August 7, 2024\nInvoice Date: August 8, 2024\nTerms: Net 15\n\nShip To:\nWarehouse Direct\n555 Distribution Center\n\nOrder Details:\n  Express Shipping (2-day)    $89.00\n  Insurance                   $12.00\n  Fuel Surcharge              $8.50\n\nInvoice Total: $109.50\n\nPayment expected by: August 23, 2024\n\nQuestions? Call 1-800-555-SHIP"
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Medium - multiple dates (order, ship, invoice, payment due), vendor name at very top"
+    }
+}

@@ -1,0 +1,25 @@
+fields:
+  invoice_number:
+    exists: true
+    ambiguous: false
+    value: "INV-5521"
+    quote: "INVOICE #INV-5521"
+    page: 1
+  total_amount:
+    exists: true
+    ambiguous: false
+    value: "$2,000.00"
+    quote: "Total: $2,000.00"
+    page: 1
+  due_date:
+    exists: true
+    ambiguous: false
+    value: "December 1, 2024"
+    quote: "Payment Due: December 1, 2024"
+    page: 1
+  vendor_name:
+    exists: true
+    ambiguous: false
+    value: "GlobalTech Solutions"
+    quote: "Vendor: GlobalTech Solutions"
+    page: 1

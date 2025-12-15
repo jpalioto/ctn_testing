@@ -1,0 +1,13 @@
+{
+    "id": "invoice_004",
+    "doc_type": "invoice",
+    "difficulty": "easy",
+    "text": "SALES INVOICE\n\nInvoice No: 2024-11-0089\nInvoice Date: October 15, 2024\nDue Date: November 15, 2024\n\nFrom:\nPrecision Parts Ltd.\n100 Factory Lane\nManufacturing District\n\nTo:\nRetail Outlets Inc.\n\nItem                    Amount\n--------------------------------\nSteel Brackets x100     $450.00\nAluminum Sheets x50     $325.00\nFasteners Kit           $75.00\nFreight                 $50.00\n--------------------------------\nGrand Total:            $900.00\n\nTerms: Net 30 days",
+    "pages": [
+        "SALES INVOICE\n\nInvoice No: 2024-11-0089\nInvoice Date: October 15, 2024\nDue Date: November 15, 2024\n\nFrom:\nPrecision Parts Ltd.\n100 Factory Lane\nManufacturing District\n\nTo:\nRetail Outlets Inc.\n\nItem                    Amount\n--------------------------------\nSteel Brackets x100     $450.00\nAluminum Sheets x50     $325.00\nFasteners Kit           $75.00\nFreight                 $50.00\n--------------------------------\nGrand Total:            $900.00\n\nTerms: Net 30 days"
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Easy - standard format"
+    }
+}

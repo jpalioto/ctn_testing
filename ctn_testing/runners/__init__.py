@@ -1,6 +1,6 @@
 """Evaluation runners."""
 from .document import Document, DocumentWithGroundTruth, load_document_set
-from .kernel import Kernel, TextKernel, NullBaseline, load_kernel, OUTPUT_FORMAT
+from .kernel import Kernel, TextKernel, NullBaseline, load_kernel
 from .results import FieldResult, DocumentResult, RunResults
 from .runner import Runner, RunConfig, run_evaluation
 
@@ -14,7 +14,6 @@ __all__ = [
     "TextKernel",
     "NullBaseline",
     "load_kernel",
-    "OUTPUT_FORMAT",
     # Results
     "FieldResult",
     "DocumentResult",

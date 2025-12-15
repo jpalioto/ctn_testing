@@ -190,17 +190,12 @@ def ground_truth_from_schema(
         evidence_page=schema.page,
     )
 
-
 def parse_llm_response(response_text: str):
-    """Parse and validate LLM JSON response into Extraction objects.
-    
-    Handles markdown code fences and validates structure.
-    Raises: pydantic.ValidationError if response doesn't match schema.
-    """
+    """Parse LLM JSON response. Flexible - accepts multiple formats."""
     import json
-    
+
     text = response_text.strip()
-    
+
     # Strip markdown code fences
     if text.startswith("```"):
         lines = text.split("\n")
@@ -210,8 +205,73 @@ def parse_llm_response(response_text: str):
                 end_idx = i
                 break
         text = "\n".join(lines[1:end_idx])
-    
+
     data = json.loads(text)
-    validated = ExtractionsResponseSchema.model_validate(data)
     
-    return [extraction_from_schema(e) for e in validated.extractions]
+    # Try multiple formats
+    extractions_list = None
+    
+    # Format 1: {"extractions": [...]}
+    if isinstance(data, dict) and "extractions" in data:
+        extractions_list = data["extractions"]
+    
+    # Format 2: [...] (array at root)
+    elif isinstance(data, list):
+        extractions_list = data
+    
+    # Format 3: {"field_name": value, ...} (flat object)
+    elif isinstance(data, dict):
+        # Convert flat object to extractions format
+        extractions_list = []
+        for key, val in data.items():
+            if isinstance(val, dict):
+                # Nested: {"invoice_number": {"value": "X", "quote": "..."}}
+                extractions_list.append({
+                    "field": key,
+                    "value": val.get("value", val),
+                    "evidence": {
+                        "quote": val.get("quote") or val.get("evidence", {}).get("quote"),
+                        "page": val.get("page") or val.get("evidence", {}).get("page"),
+                    },
+                    "status": val.get("status", "ok"),
+                })
+            else:
+                # Simple: {"invoice_number": "INV-123"}
+                extractions_list.append({
+                    "field": key,
+                    "value": val,
+                    "evidence": {"quote": None, "page": None},
+                    "status": "ok",
+                })
+    
+    if extractions_list is None:
+        return []
+    
+    # Convert to internal types (lenient)
+    from .types import Extraction, Evidence, ExtractionStatus
+    
+    result = []
+    for item in extractions_list:
+        if not isinstance(item, dict):
+            continue
+        
+        field_name = item.get("field") or item.get("name") or ""
+        if not field_name:
+            continue
+            
+        evidence = item.get("evidence", {}) or {}
+        
+        result.append(Extraction(
+            field_name=field_name,
+            value=item.get("value"),
+            evidence=Evidence(
+                quote=evidence.get("quote"),
+                page=evidence.get("page"),
+            ),
+            status=ExtractionStatus(item.get("status", "ok").lower()) 
+                   if item.get("status", "ok").lower() in {"ok", "missing", "ambiguous"} 
+                   else ExtractionStatus.OK,
+            candidates=[],
+        ))
+    
+    return result

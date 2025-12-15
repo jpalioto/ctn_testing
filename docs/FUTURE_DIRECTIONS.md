@@ -108,6 +108,42 @@ salted_prompt = prefix_char + original_prompt
 
 ---
 
+## Experimental Methodology
+
+### Single-Blind Kernel Generation (2024-12-14)
+
+**Problem:** Experimenter knowledge of CTN could leak into idiomatic baseline design. Even unconscious choices (e.g., including "list candidates for ambiguous fields") could give idiomatic kernel CTN-like behavior, contaminating the comparison.
+
+**Solution:** Single-blind kernel generation.
+
+1. Prompt sent to Gemini (a model not involved in the evaluation):
+   ```
+   I need a system prompt for an LLM that extracts information from business documents.
+   
+   Requirements:
+   - The output must be JSON
+   - The LLM will receive a document as the user message
+   - The system prompt should be concise (under 100 words)
+   
+   Write only the system prompt, nothing else.
+   ```
+
+2. Gemini's response used verbatim as the idiomatic kernel. No edits.
+
+**Source of experimental error:**
+- Gemini's training may include CTN-like patterns
+- The prompt itself ("extract", "JSON") carries some structural bias
+- Different prompt to Gemini would yield different baseline
+
+**Mitigation:**
+- Document the exact prompt used
+- Document the exact response received
+- Future work: multiple idiomatic baselines from different generators
+
+**Classification:** Known confound. Documented for transparency. Does not invalidate results but limits generalization of "idiomatic" label.
+
+---
+
 ## Notes
 
 *Add observations here as experiments progress.*

@@ -1,0 +1,25 @@
+fields:
+  invoice_number:
+    exists: true
+    ambiguous: false
+    value: "2024-11-0089"
+    quote: "Invoice No: 2024-11-0089"
+    page: 1
+  total_amount:
+    exists: true
+    ambiguous: false
+    value: "$900.00"
+    quote: "Grand Total:            $900.00"
+    page: 1
+  due_date:
+    exists: true
+    ambiguous: false
+    value: "November 15, 2024"
+    quote: "Due Date: November 15, 2024"
+    page: 1
+  vendor_name:
+    exists: true
+    ambiguous: false
+    value: "Precision Parts Ltd."
+    quote: "From:\nPrecision Parts Ltd."
+    page: 1

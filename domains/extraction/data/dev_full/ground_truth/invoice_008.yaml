@@ -1,0 +1,26 @@
+fields:
+  invoice_number:
+    exists: true
+    ambiguous: false
+    value: "MRS-0612-A"
+    quote: "Job #: MRS-0612-A"
+    page: 1
+  total_amount:
+    exists: true
+    ambiguous: false
+    value: "$500"
+    acceptable_values: ["$500", "$500.00", "$500 even"]
+    quote: "Your total comes to: $500 even"
+    page: 1
+  due_date:
+    exists: true
+    ambiguous: false
+    value: "June 22, 2024"
+    quote: "Please pay within 7 days (by June 22, 2024)"
+    page: 1
+  vendor_name:
+    exists: true
+    ambiguous: false
+    value: "Mike's Repair Shop"
+    quote: "Mike's Repair Shop"
+    page: 1

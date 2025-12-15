@@ -1,0 +1,27 @@
+fields:
+  invoice_number:
+    exists: true
+    ambiguous: true
+    value: "DS-78432"
+    acceptable_values: ["DS-78432", "ACC-2024-445"]
+    candidate_values: ["DS-78432", "ACC-2024-445"]
+    quote: "Ref: DS-78432"
+    page: 1
+  total_amount:
+    exists: true
+    ambiguous: false
+    value: "$2,150.00"
+    quote: "Amount Due:                $2,150.00"
+    page: 1
+  due_date:
+    exists: true
+    ambiguous: false
+    value: "October 20, 2024"
+    quote: "Balance Due By: October 20, 2024"
+    page: 1
+  vendor_name:
+    exists: true
+    ambiguous: false
+    value: "DataServ Corp."
+    quote: "DataServ Corp."
+    page: 1

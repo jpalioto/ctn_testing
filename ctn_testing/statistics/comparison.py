@@ -58,6 +58,20 @@ def paired_comparison(
     b = np.array(scores_b)
     diff = a - b
     n = len(diff)
+
+    if diff.std(ddof=1) == 0:
+        return ComparisonResult(
+            mean_diff=float(diff.mean()),
+            t_stat=0.0,
+            p_value=1.0,  # No evidence of difference
+            effect_size=0.0,
+            ci_lower=float(diff.mean()),
+            ci_upper=float(diff.mean()),
+            n=n
+        )
+    
+    t_stat, p_value = stats.ttest_rel(a, b)
+
     
     t_stat, p_value = stats.ttest_rel(a, b)
     effect_size = cohens_d_paired(scores_a, scores_b)

@@ -1,0 +1,36 @@
+fields:
+  invoice_number:
+    exists: true
+    value: "INV-2024-0042"
+    quote: "Invoice Number: INV-2024-0042"
+    page: 1
+
+  total_amount:
+    exists: true
+    value: "$220.00"
+    acceptable_values:
+      - "$220.00"
+      - "220.00"
+      - "220"
+    quote: "Total Amount Due: $220.00"
+    page: 1
+
+  due_date:
+    exists: true
+    value: "January 13, 2025"
+    acceptable_values:
+      - "January 13, 2025"
+      - "2025-01-13"
+      - "01/13/2025"
+    quote: "Due Date: January 13, 2025"
+    page: 1
+
+  vendor_name:
+    exists: true
+    value: "TechSupply Co."
+    acceptable_values:
+      - "TechSupply Co."
+      - "TechSupply Co"
+      - "TechSupply"
+    quote: "From:\nTechSupply Co."
+    page: 1

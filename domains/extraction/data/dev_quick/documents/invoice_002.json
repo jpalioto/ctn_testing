@@ -1,0 +1,13 @@
+{
+    "id": "invoice_002",
+    "doc_type": "invoice",
+    "difficulty": "hard",
+    "text": "PURCHASE ORDER / INVOICE\n\nDocument #: PO-2024-1337\nAlternate Reference: INV-2024-8899\nIssued: November 30, 2024\n\nBuyer:\nGlobal Industries Ltd.\n\nSeller:\nParts Unlimited Inc.\n\nDescription: Industrial components\nAmount: $5,500.00\n\nNote: No due date specified. Contact accounts payable for payment terms.",
+    "pages": [
+        "PURCHASE ORDER / INVOICE\n\nDocument #: PO-2024-1337\nAlternate Reference: INV-2024-8899\nIssued: November 30, 2024\n\nBuyer:\nGlobal Industries Ltd.\n\nSeller:\nParts Unlimited Inc.\n\nDescription: Industrial components\nAmount: $5,500.00\n\nNote: No due date specified. Contact accounts payable for payment terms."
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Ambiguous invoice number (two candidates), missing due date"
+    }
+}

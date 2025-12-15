@@ -1,0 +1,34 @@
+fields:
+  invoice_number:
+    exists: true
+    ambiguous: true
+    candidate_values:
+      - "PO-2024-1337"
+      - "INV-2024-8899"
+    quote: null
+    page: null
+
+  total_amount:
+    exists: true
+    value: "$5,500.00"
+    acceptable_values:
+      - "$5,500.00"
+      - "5,500.00"
+      - "5500.00"
+      - "5500"
+    quote: "Amount: $5,500.00"
+    page: 1
+
+  due_date:
+    exists: false
+    value: null
+
+  vendor_name:
+    exists: true
+    value: "Parts Unlimited Inc."
+    acceptable_values:
+      - "Parts Unlimited Inc."
+      - "Parts Unlimited Inc"
+      - "Parts Unlimited"
+    quote: "Seller:\nParts Unlimited Inc."
+    page: 1

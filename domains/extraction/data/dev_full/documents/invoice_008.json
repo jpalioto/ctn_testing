@@ -1,0 +1,13 @@
+{
+    "id": "invoice_008",
+    "doc_type": "invoice",
+    "difficulty": "medium",
+    "text": "Hi there!\n\nThanks for using Mike's Repair Shop for your recent service.\n\nHere's what we did:\n\n  Diagnosis fee: $50\n  Parts (alternator): $285\n  Labor (2 hrs @ $75/hr): $150\n  Shop supplies: $15\n\n  Your total comes to: $500 even\n\nPlease pay within 7 days (by June 22, 2024).\n\nJob #: MRS-0612-A\nService date: June 15, 2024\n\nThanks!\n- Mike\nMike's Repair Shop\n234 Main St",
+    "pages": [
+        "Hi there!\n\nThanks for using Mike's Repair Shop for your recent service.\n\nHere's what we did:\n\n  Diagnosis fee: $50\n  Parts (alternator): $285\n  Labor (2 hrs @ $75/hr): $150\n  Shop supplies: $15\n\n  Your total comes to: $500 even\n\nPlease pay within 7 days (by June 22, 2024).\n\nJob #: MRS-0612-A\nService date: June 15, 2024\n\nThanks!\n- Mike\nMike's Repair Shop\n234 Main St"
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Medium - informal language, vendor name at bottom, 'Job #' as invoice number, casual amount format"
+    }
+}

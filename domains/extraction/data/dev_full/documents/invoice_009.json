@@ -1,0 +1,13 @@
+{
+    "id": "invoice_009",
+    "doc_type": "invoice",
+    "difficulty": "hard",
+    "text": "APEX INDUSTRIAL SUPPLY\n\nPO Box 4411\nIndustrial Zone C\n\nSHIPMENT CONFIRMATION / INVOICE\n\nShipment ID: AIS-88721\nTracking: 1Z999AA10123456784\nOrder #: ORD-2024-5567\n\nShipped To:\nBeta Manufacturing\nAttn: Receiving Dept\n\nItems Shipped:\n  Industrial Bearings (24 units)    $1,440.00\n  Lubricant Case                    $180.00\n  Hazmat Handling Fee               $45.00\n                                    ---------\n  TOTAL:                            $1,665.00\n\nShipped: March 3, 2024\n\nFor billing inquiries contact ar@apexsupply.com",
+    "pages": [
+        "APEX INDUSTRIAL SUPPLY\n\nPO Box 4411\nIndustrial Zone C\n\nSHIPMENT CONFIRMATION / INVOICE\n\nShipment ID: AIS-88721\nTracking: 1Z999AA10123456784\nOrder #: ORD-2024-5567\n\nShipped To:\nBeta Manufacturing\nAttn: Receiving Dept\n\nItems Shipped:\n  Industrial Bearings (24 units)    $1,440.00\n  Lubricant Case                    $180.00\n  Hazmat Handling Fee               $45.00\n                                    ---------\n  TOTAL:                            $1,665.00\n\nShipped: March 3, 2024\n\nFor billing inquiries contact ar@apexsupply.com"
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Hard - no due date, multiple ID numbers (shipment, tracking, order), combined shipment/invoice document"
+    }
+}

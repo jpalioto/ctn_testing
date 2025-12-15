@@ -8,28 +8,19 @@ import os
 class ModelConfig:
     """
     LLM provider configuration.
-    
+
     provider: anthropic | google | openai
     name: Model identifier (e.g. claude-sonnet-4-5-latest)
     api_key_env: Environment variable containing API key
     temperature: Sampling temperature, 0.0 = deterministic
     max_tokens: Maximum output tokens
-    reasoning: Enable extended thinking (Anthropic) / thinking mode (Google)
-    max_reasoning_tokens: Budget for reasoning, 0 = provider default
     """
     provider: str
     name: str
     api_key_env: str
     temperature: float = 0.0
     max_tokens: int = 2048
-    reasoning: bool = False
-    max_reasoning_tokens: int = 0
-    provider: str
-    name: str
-    api_key_env: str
-    temperature: float = 0.0
-    max_tokens: int = 2048
-    
+
     def get_api_key(self) -> str:
         key = os.environ.get(self.api_key_env)
         if not key:
@@ -47,38 +38,40 @@ class CompletionResult:
 
 class ModelClient(ABC):
     """Interface for LLM providers."""
-    
+
     def __init__(self, config: ModelConfig):
         self._config = config
-    
+
     @property
     def name(self) -> str:
         return self._config.name
-    
+
     @abstractmethod
-    def complete(self, prompt: str) -> CompletionResult:
+    def complete(self, system: str, user: str) -> CompletionResult:
+        """Complete with system prompt and user message."""
         ...
 
 
 class AnthropicClient(ModelClient):
-    
+
     def __init__(self, config: ModelConfig):
         super().__init__(config)
         self._client = None
-    
+
     def _get_client(self):
         if self._client is None:
             import anthropic
             self._client = anthropic.Anthropic(api_key=self._config.get_api_key())
         return self._client
-    
-    def complete(self, prompt: str) -> CompletionResult:
+
+    def complete(self, system: str, user: str) -> CompletionResult:
         client = self._get_client()
         response = client.messages.create(
             model=self._config.name,
             max_tokens=self._config.max_tokens,
             temperature=self._config.temperature,
-            messages=[{"role": "user", "content": prompt}]
+            system=system,
+            messages=[{"role": "user", "content": user}]
         )
         return CompletionResult(
             text=response.content[0].text if hasattr(response.content[0], 'text') else str(response.content[0]),
@@ -89,25 +82,27 @@ class AnthropicClient(ModelClient):
 
 
 class GoogleClient(ModelClient):
-    
+
     def __init__(self, config: ModelConfig):
         super().__init__(config)
         self._client = None
-    
+
     def _get_client(self):
         if self._client is None:
             from google import genai
             self._client = genai.Client(api_key=self._config.get_api_key())
         return self._client
-    
-    def complete(self, prompt: str) -> CompletionResult:
+
+    def complete(self, system: str, user: str) -> CompletionResult:
         client = self._get_client()
         response = client.models.generate_content(
             model=self._config.name,
-            contents=prompt,
+            contents=user,
             config={
                 "temperature": self._config.temperature,
                 "max_output_tokens": self._config.max_tokens,
+                "system_instruction": system,
+                "response_mime_type": "application/json",
             }
         )
         return CompletionResult(
@@ -119,24 +114,27 @@ class GoogleClient(ModelClient):
 
 
 class OpenAIClient(ModelClient):
-    
+
     def __init__(self, config: ModelConfig):
         super().__init__(config)
         self._client = None
-    
+
     def _get_client(self):
         if self._client is None:
             from openai import OpenAI
             self._client = OpenAI(api_key=self._config.get_api_key())
         return self._client
-    
-    def complete(self, prompt: str) -> CompletionResult:
+
+    def complete(self, system: str, user: str) -> CompletionResult:
         client = self._get_client()
         response = client.chat.completions.create(
             model=self._config.name,
             max_tokens=self._config.max_tokens,
             temperature=self._config.temperature,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user}
+            ]
         )
         return CompletionResult(
             text=response.choices[0].message.content,
@@ -145,8 +143,6 @@ class OpenAIClient(ModelClient):
             model=self._config.name
         )
 
-
-# Add providers here
 PROVIDERS = {
     "anthropic": AnthropicClient,
     "google": GoogleClient,

@@ -1,0 +1,25 @@
+fields:
+  invoice_number:
+    exists: true
+    ambiguous: false
+    value: "QS-2024-1156"
+    quote: "Invoice #: QS-2024-1156"
+    page: 1
+  total_amount:
+    exists: true
+    ambiguous: false
+    value: "$109.50"
+    quote: "Invoice Total: $109.50"
+    page: 1
+  due_date:
+    exists: true
+    ambiguous: false
+    value: "August 23, 2024"
+    quote: "Payment expected by: August 23, 2024"
+    page: 1
+  vendor_name:
+    exists: true
+    ambiguous: false
+    value: "QUICKSHIP LOGISTICS"
+    quote: "QUICKSHIP LOGISTICS"
+    page: 1

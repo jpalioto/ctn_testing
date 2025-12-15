@@ -36,6 +36,9 @@ class DocumentResult:
     model: str
     kernel: str
     fields: list[FieldResult]
+    raw_response: str | None = None
+    judge_raw_response: str | None = None
+    judge_outcome: str | None = None
     latency_ms: float = 0.0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -66,6 +69,9 @@ class DocumentResult:
             "output_tokens": self.output_tokens,
             "cache_prefix": self.cache_prefix,
             "error": self.error,
+            "raw_response": self.raw_response,
+            "judge_raw_response": self.judge_raw_response,
+            "judge_outcome": self.judge_outcome,
             "fields": [
                 {
                     "field": f.field_name,

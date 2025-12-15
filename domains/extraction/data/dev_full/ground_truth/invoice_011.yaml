@@ -1,0 +1,22 @@
+fields:
+  invoice_number:
+    exists: false
+    ambiguous: false
+    value: null
+  total_amount:
+    exists: true
+    ambiguous: false
+    value: "$165"
+    acceptable_values: ["$165", "$165.00"]
+    quote: "TOTAL: $165"
+    page: 1
+  due_date:
+    exists: false
+    ambiguous: false
+    value: null
+  vendor_name:
+    exists: true
+    ambiguous: false
+    value: "Joe's Plumbing"
+    quote: "From: Joe's Plumbing"
+    page: 1

@@ -1,0 +1,14 @@
+{
+    "id": "invoice_010",
+    "doc_type": "invoice",
+    "difficulty": "hard",
+    "text": "CONSOLIDATED BILLING SERVICES\nOn behalf of: Premium Healthcare Partners\n\nStatement of Account\nPage 1 of 2\n\nAccount Number: PH-29481\nStatement Period: Q4 2024\nPrepared: January 5, 2025\n\nPatient Services Summary:\n  Office Visits (4)              $600.00\n  Lab Work                       $450.00\n  Specialist Referral            $200.00\n\n[Continued on Page 2]\n\n--- PAGE BREAK ---\n\nPage 2 of 2\n\nBrought Forward:                 $1,250.00\n\nAdditional Charges:\n  Medical Records Fee            $25.00\n  After-hours Consultation       $150.00\n\nInsurance Adjustment:            -$400.00\nPatient Responsibility:          $1,025.00\n\nPLEASE PAY BY: February 5, 2025\n\nMake checks payable to:\nConsolidated Billing Services\nRemit to: PO Box 9900",
+    "pages": [
+        "CONSOLIDATED BILLING SERVICES\nOn behalf of: Premium Healthcare Partners\n\nStatement of Account\nPage 1 of 2\n\nAccount Number: PH-29481\nStatement Period: Q4 2024\nPrepared: January 5, 2025\n\nPatient Services Summary:\n  Office Visits (4)              $600.00\n  Lab Work                       $450.00\n  Specialist Referral            $200.00\n\n[Continued on Page 2]",
+        "Page 2 of 2\n\nBrought Forward:                 $1,250.00\n\nAdditional Charges:\n  Medical Records Fee            $25.00\n  After-hours Consultation       $150.00\n\nInsurance Adjustment:            -$400.00\nPatient Responsibility:          $1,025.00\n\nPLEASE PAY BY: February 5, 2025\n\nMake checks payable to:\nConsolidated Billing Services\nRemit to: PO Box 9900"
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Hard - multi-page, total on page 2, two company names (billing service vs actual vendor), account number not invoice number"
+    }
+}

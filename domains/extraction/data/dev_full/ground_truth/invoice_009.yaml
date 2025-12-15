@@ -1,0 +1,24 @@
+fields:
+  invoice_number:
+    exists: true
+    ambiguous: true
+    value: null
+    candidate_values: ["AIS-88721", "ORD-2024-5567", "1Z999AA10123456784"]
+    quote: null
+    page: 1
+  total_amount:
+    exists: true
+    ambiguous: false
+    value: "$1,665.00"
+    quote: "TOTAL:                            $1,665.00"
+    page: 1
+  due_date:
+    exists: false
+    ambiguous: false
+    value: null
+  vendor_name:
+    exists: true
+    ambiguous: false
+    value: "APEX INDUSTRIAL SUPPLY"
+    quote: "APEX INDUSTRIAL SUPPLY"
+    page: 1

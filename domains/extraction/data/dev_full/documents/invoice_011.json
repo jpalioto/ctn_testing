@@ -1,0 +1,13 @@
+{
+    "id": "invoice_011",
+    "doc_type": "invoice",
+    "difficulty": "hard",
+    "text": "HANDWRITTEN INVOICE (SCANNED)\n\nFrom: Joe's Plumbing\n       123 Pipe St\n\nTo: Mrs. Johnson\n    456 Oak Lane\n\nDate of Service: 11/15/24\n\nWork Performed:\n- Fixed leaky faucet in kitchen\n- Replaced washer and valve\n- Checked water pressure\n\nParts: $45\nLabor (1.5 hrs): $120\n-----------------\nTOTAL: $165\n\nPlease pay within 2 weeks\n\nThank you!\n\n[signature]\nJoe Martinez\nLic# PLB-44521",
+    "pages": [
+        "HANDWRITTEN INVOICE (SCANNED)\n\nFrom: Joe's Plumbing\n       123 Pipe St\n\nTo: Mrs. Johnson\n    456 Oak Lane\n\nDate of Service: 11/15/24\n\nWork Performed:\n- Fixed leaky faucet in kitchen\n- Replaced washer and valve\n- Checked water pressure\n\nParts: $45\nLabor (1.5 hrs): $120\n-----------------\nTOTAL: $165\n\nPlease pay within 2 weeks\n\nThank you!\n\n[signature]\nJoe Martinez\nLic# PLB-44521"
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Hard - no invoice number at all, relative due date '2 weeks', short date format, informal layout"
+    }
+}

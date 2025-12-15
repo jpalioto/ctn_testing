@@ -1,0 +1,13 @@
+{
+    "id": "invoice_005",
+    "doc_type": "invoice",
+    "difficulty": "medium",
+    "text": "DataServ Corp.\n1200 Tech Park Drive\n\nBILLING STATEMENT\n\nRef: DS-78432\nAccount: ACC-2024-445\nStatement Date: September 20, 2024\nBalance Due By: October 20, 2024\n\nClient: MegaCorp Holdings\n\nServices Rendered:\n  Cloud Hosting (Sept)     $1,500.00\n  Data Backup Service      $250.00\n  Priority Support         $400.00\n\nPrevious Balance:          $0.00\nCurrent Charges:           $2,150.00\n---------------------------------\nAmount Due:                $2,150.00\n\nPlease remit payment by due date.",
+    "pages": [
+        "DataServ Corp.\n1200 Tech Park Drive\n\nBILLING STATEMENT\n\nRef: DS-78432\nAccount: ACC-2024-445\nStatement Date: September 20, 2024\nBalance Due By: October 20, 2024\n\nClient: MegaCorp Holdings\n\nServices Rendered:\n  Cloud Hosting (Sept)     $1,500.00\n  Data Backup Service      $250.00\n  Priority Support         $400.00\n\nPrevious Balance:          $0.00\nCurrent Charges:           $2,150.00\n---------------------------------\nAmount Due:                $2,150.00\n\nPlease remit payment by due date."
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Medium - 'Ref' instead of Invoice Number, 'Balance Due By' instead of Due Date, vendor at top not labeled"
+    }
+}

@@ -1,0 +1,13 @@
+{
+    "id": "invoice_007",
+    "doc_type": "invoice",
+    "difficulty": "medium",
+    "text": "CREATIVE DESIGNS AGENCY\n---------------------------\n\nProject Invoice\n\nProject: Website Redesign\nClient Reference: WR-2024-Q3\nOur Reference: CDA-4521\n\nBillable To:\nStartup Ventures LLC\n\nBreakdown:\n  Design Phase          $3,000.00\n  Development           $5,500.00\n  Testing               $1,000.00\n  Project Management    $500.00\n                        ----------\n  Subtotal:             $10,000.00\n  Discount (10%):       -$1,000.00\n                        ----------\n  Net Amount:           $9,000.00\n  Tax (8%):             $720.00\n                        ==========\n  TOTAL DUE:            $9,720.00\n\nDated: July 1, 2024\nPayment Terms: Due upon receipt",
+    "pages": [
+        "CREATIVE DESIGNS AGENCY\n---------------------------\n\nProject Invoice\n\nProject: Website Redesign\nClient Reference: WR-2024-Q3\nOur Reference: CDA-4521\n\nBillable To:\nStartup Ventures LLC\n\nBreakdown:\n  Design Phase          $3,000.00\n  Development           $5,500.00\n  Testing               $1,000.00\n  Project Management    $500.00\n                        ----------\n  Subtotal:             $10,000.00\n  Discount (10%):       -$1,000.00\n                        ----------\n  Net Amount:           $9,000.00\n  Tax (8%):             $720.00\n                        ==========\n  TOTAL DUE:            $9,720.00\n\nDated: July 1, 2024\nPayment Terms: Due upon receipt"
+    ],
+    "metadata": {
+        "source": "synthetic",
+        "notes": "Medium - two reference numbers, multiple amount levels (subtotal/net/total), due date is 'upon receipt'"
+    }
+}

@@ -1,0 +1,25 @@
+fields:
+  invoice_number:
+    exists: true
+    ambiguous: true
+    value: "CDA-4521"
+    acceptable_values: ["CDA-4521", "WR-2024-Q3"]
+    candidate_values: ["CDA-4521", "WR-2024-Q3"]
+    quote: "Our Reference: CDA-4521"
+    page: 1
+  total_amount:
+    exists: true
+    ambiguous: false
+    value: "$9,720.00"
+    quote: "TOTAL DUE:            $9,720.00"
+    page: 1
+  due_date:
+    exists: false
+    ambiguous: false
+    value: null
+  vendor_name:
+    exists: true
+    ambiguous: false
+    value: "CREATIVE DESIGNS AGENCY"
+    quote: "CREATIVE DESIGNS AGENCY"
+    page: 1
