@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from datetime import datetime
 
 from ..core import (
     EvaluationConfig,
@@ -16,6 +17,7 @@ from .document import DocumentWithGroundTruth, load_document_set
 from .kernel import Kernel, NullBaseline, load_kernel
 from .results import RunResults, DocumentResult, FieldResult
 from .judge import judge_extraction, JudgeResult
+from ..utils.hashing import md5_hash, hash_config
 
 # Zero-width characters for cache busting (invisible, deterministic)
 ZW_CHARS = ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff']
@@ -99,6 +101,13 @@ class Runner:
     ) -> DocumentResult:
         """Extract from a single document. Returns raw response, no scoring."""
 
+        
+        document_hash = md5_hash(doc.document.text)
+        kernel_hash = md5_hash(kernel.raw_content) if hasattr(kernel, 'raw_content') else None
+        gt_hash = md5_hash(str(doc.ground_truth)) 
+        model_config_hash = hash_config(model)
+        timestamp = datetime.now()
+        
         # Handle null baseline specially
         if isinstance(kernel, NullBaseline):
             extractions = kernel.extract_directly()
@@ -133,6 +142,13 @@ class Runner:
                 model=model.name,
                 kernel=kernel.name,
                 fields=field_results,
+                timestamp=timestamp,
+                document_hash=document_hash,
+                kernel_hash=kernel_hash,
+                gt_hash=gt_hash,
+                model_config_hash=model_config_hash,
+                model_temperature=model.temperature,
+                model_max_tokens=model.max_tokens,
             )
 
         # Render prompt: system (kernel) + user (document)
@@ -160,6 +176,13 @@ class Runner:
                 raw_response=None,
                 error=str(e),
                 cache_prefix=prefix_name,
+                timestamp=timestamp,
+                document_hash=document_hash,
+                kernel_hash=kernel_hash,
+                gt_hash=gt_hash,
+                model_config_hash=model_config_hash,
+                model_temperature=model.temperature,
+                model_max_tokens=model.max_tokens,
             )
 
         # Raw response only - no shaping, no scoring
@@ -173,6 +196,13 @@ class Runner:
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
             cache_prefix=prefix_name,
+            timestamp=timestamp,
+            document_hash=document_hash,
+            kernel_hash=kernel_hash,
+            gt_hash=gt_hash,
+            model_config_hash=model_config_hash,
+            model_temperature=model.temperature,
+            model_max_tokens=model.max_tokens,
         )
 
     # =========================================================================
@@ -297,7 +327,17 @@ class Runner:
                 result.fields = judge_result.fields
                 result.judge_raw_response = judge_result.raw_response
                 result.judge_outcome = judge_result.outcome
-                
+
+                # Add judge reproducibility info
+                result.judge_model = judges[0].name
+                result.judge_temperature = judges[0].temperature
+                result.judge_max_tokens = judges[0].max_tokens
+                result.judge_config_hash = hash_config(judges[0])
+            
+                judge_prompt_path = self._data_dir.parent.parent / "prompts" / "judge_system.txt"
+                if judge_prompt_path.exists():
+                    result.judge_prompt_hash = md5_hash(judge_prompt_path.read_text())
+                    
                 if judge_result.outcome == "OK":
                     self._log(f"    Composite: {result.composite_score:.2f}")
                 elif judge_result.outcome.startswith("ERROR:"):

@@ -42,6 +42,10 @@ class TextKernel(Kernel):
         self._path = path
         self.name = path.stem
 
+    @property
+    def raw_content(self) -> str:
+        return self._template
+
     def render(self, document: str) -> RenderedPrompt:
         return RenderedPrompt(
             system=self._template,

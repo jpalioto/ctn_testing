@@ -27,23 +27,71 @@ class FieldResult:
     
     # Judge results (if applicable)
     judge_scores: dict[str, float] = field(default_factory=dict)
+    
+    @classmethod
+    def from_dict(cls, d: dict) -> "FieldResult":
+        """Reconstruct FieldResult from dict."""
+        scores = d.get("scores", {})
+        return cls(
+            field_name=d["field"],
+            extracted_value=d["extracted"],
+            expected_value=d["expected"],
+            quote=d["quote"],
+            page=d["page"],
+            status=d["status"],
+            value_score=scores.get("value", 0.0),
+            evidence_score=scores.get("evidence", 0.0),
+            page_score=scores.get("page", 0.0),
+            status_score=scores.get("status", 0.0),
+            schema_score=scores.get("schema", 0.0),
+            composite_score=scores.get("composite", 0.0),
+            judge_scores=d.get("judge_scores", {}),
+        )
 
 
 @dataclass
 class DocumentResult:
     """Result for a single document."""
+    # Identity
     doc_id: str
     model: str
     kernel: str
     fields: list[FieldResult]
+    
+    # Raw outputs
     raw_response: str | None = None
     judge_raw_response: str | None = None
     judge_outcome: str | None = None
+    
+    # Timing
+    timestamp: datetime | None = None
     latency_ms: float = 0.0
+    
+    # Tokens
     input_tokens: int = 0
     output_tokens: int = 0
+    
+    # Errors
     error: str | None = None
     cache_prefix: str | None = None
+    
+    # Reproducibility - hashes (verification)
+    document_hash: str | None = None
+    kernel_hash: str | None = None
+    gt_hash: str | None = None
+    judge_prompt_hash: str | None = None
+    model_config_hash: str | None = None
+    judge_config_hash: str | None = None
+    
+    # Reproducibility - explicit params (readability)
+    model_temperature: float | None = None
+    model_max_tokens: int | None = None
+    judge_model: str | None = None
+    judge_temperature: float | None = None
+    judge_max_tokens: int | None = None
+    
+    # Debug
+    api_request_id: str | None = None
     
     @property
     def composite_score(self) -> float:
@@ -59,19 +107,51 @@ class DocumentResult:
     
     def to_dict(self) -> dict:
         return {
+            # Identity
             "doc_id": self.doc_id,
             "model": self.model,
             "kernel": self.kernel,
+            
+            # Computed scores
             "composite_score": self.composite_score,
             "value_score": self.value_score,
+            
+            # Timing
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "latency_ms": self.latency_ms,
+            
+            # Tokens
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            
+            # Errors
             "cache_prefix": self.cache_prefix,
             "error": self.error,
+            
+            # Raw outputs
             "raw_response": self.raw_response,
             "judge_raw_response": self.judge_raw_response,
             "judge_outcome": self.judge_outcome,
+            
+            # Reproducibility - hashes
+            "document_hash": self.document_hash,
+            "kernel_hash": self.kernel_hash,
+            "gt_hash": self.gt_hash,
+            "judge_prompt_hash": self.judge_prompt_hash,
+            "model_config_hash": self.model_config_hash,
+            "judge_config_hash": self.judge_config_hash,
+            
+            # Reproducibility - explicit params
+            "model_temperature": self.model_temperature,
+            "model_max_tokens": self.model_max_tokens,
+            "judge_model": self.judge_model,
+            "judge_temperature": self.judge_temperature,
+            "judge_max_tokens": self.judge_max_tokens,
+            
+            # Debug
+            "api_request_id": self.api_request_id,
+            
+            # Fields
             "fields": [
                 {
                     "field": f.field_name,
@@ -93,6 +173,60 @@ class DocumentResult:
                 for f in self.fields
             ],
         }
+    
+    @classmethod
+    def from_dict(cls, d: dict) -> "DocumentResult":
+        """Reconstruct DocumentResult from dict."""
+        # Parse timestamp
+        timestamp = None
+        if d.get("timestamp"):
+            timestamp = datetime.fromisoformat(d["timestamp"])
+        
+        # Parse fields
+        fields = [FieldResult.from_dict(f) for f in d.get("fields", [])]
+        
+        return cls(
+            # Identity
+            doc_id=d["doc_id"],
+            model=d["model"],
+            kernel=d["kernel"],
+            fields=fields,
+            
+            # Raw outputs
+            raw_response=d.get("raw_response"),
+            judge_raw_response=d.get("judge_raw_response"),
+            judge_outcome=d.get("judge_outcome"),
+            
+            # Timing
+            timestamp=timestamp,
+            latency_ms=d.get("latency_ms", 0.0),
+            
+            # Tokens
+            input_tokens=d.get("input_tokens", 0),
+            output_tokens=d.get("output_tokens", 0),
+            
+            # Errors
+            error=d.get("error"),
+            cache_prefix=d.get("cache_prefix"),
+            
+            # Reproducibility - hashes
+            document_hash=d.get("document_hash"),
+            kernel_hash=d.get("kernel_hash"),
+            gt_hash=d.get("gt_hash"),
+            judge_prompt_hash=d.get("judge_prompt_hash"),
+            model_config_hash=d.get("model_config_hash"),
+            judge_config_hash=d.get("judge_config_hash"),
+            
+            # Reproducibility - explicit params
+            model_temperature=d.get("model_temperature"),
+            model_max_tokens=d.get("model_max_tokens"),
+            judge_model=d.get("judge_model"),
+            judge_temperature=d.get("judge_temperature"),
+            judge_max_tokens=d.get("judge_max_tokens"),
+            
+            # Debug
+            api_request_id=d.get("api_request_id"),
+        )
 
 
 @dataclass
@@ -211,3 +345,41 @@ class RunResults:
             result_path = model_kernel_dir / f"{doc_id}.json"
             with open(result_path, "w") as f:
                 json.dump(result.to_dict(), f, indent=2)
+    
+    @classmethod
+    def load(cls, output_dir: Path) -> "RunResults":
+        """Load results from disk."""
+        # Load summary for metadata
+        summary_path = output_dir / "summary.json"
+        with open(summary_path, "r") as f:
+            summary = json.load(f)
+        
+        # Parse dates
+        started_at = datetime.fromisoformat(summary["started_at"])
+        completed_at = None
+        if summary.get("completed_at"):
+            completed_at = datetime.fromisoformat(summary["completed_at"])
+        
+        run_results = cls(
+            run_id=summary["run_id"],
+            config_name=summary["config"],
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+        
+        # Load all document results
+        raw_dir = output_dir / "raw"
+        if raw_dir.exists():
+            for model_dir in raw_dir.iterdir():
+                if not model_dir.is_dir():
+                    continue
+                for kernel_dir in model_dir.iterdir():
+                    if not kernel_dir.is_dir():
+                        continue
+                    for result_file in kernel_dir.glob("*.json"):
+                        with open(result_file, "r") as f:
+                            d = json.load(f)
+                        result = DocumentResult.from_dict(d)
+                        run_results.add(result)
+        
+        return run_results
