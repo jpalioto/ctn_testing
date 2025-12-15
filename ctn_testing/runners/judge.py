@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from ..core import ModelConfig
-from ..core.types import GroundTruth
+from ..core import GroundTruth
 from ..utils.logger import get_logger
 from ..utils.network import make_client
 from .results import FieldResult

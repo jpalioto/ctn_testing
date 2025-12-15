@@ -13,11 +13,14 @@ from ..core import (
     DocumentSchema,
 )
 from ..metrics import composite_score
-from .document import DocumentWithGroundTruth, load_document_set
 from .kernel import Kernel, NullBaseline, load_kernel
 from .results import RunResults, DocumentResult, FieldResult
 from .judge import judge_extraction, JudgeResult
 from ..utils.hashing import md5_hash, hash_config
+
+from ..core import DocumentWithGroundTruth
+from ..core.loaders import load_document_set
+from ..utils.hashing import hash_file
 
 # Zero-width characters for cache busting (invisible, deterministic)
 ZW_CHARS = ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff']
@@ -32,6 +35,28 @@ class RunConfig:
     output_dir: Path
     schema: DocumentSchema
     verbose: bool = True
+
+@dataclass
+class ExtractionContext:
+    """Immutable context for a single extraction attempt.
+    
+    Pre-computes hashes and metadata so _extract_single stays focused
+    on the actual extraction logic.
+    """
+    doc: DocumentWithGroundTruth
+    model: ModelConfig
+    kernel: Kernel
+    timestamp: datetime
+    
+    # Pre-computed hashes
+    document_hash: str | None
+    kernel_hash: str | None
+    gt_hash: str
+    model_config_hash: str
+    
+    # Cache prefix (for Gemini cache-busting)
+    cache_prefix: str
+    cache_prefix_char: str
 
 
 class Runner:
@@ -93,116 +118,176 @@ class Runner:
     # Pass 1: Extraction
     # =========================================================================
 
+    def _prepare_context(
+        self,
+        doc: DocumentWithGroundTruth,
+        model: ModelConfig,
+        kernel: Kernel,
+    ) -> ExtractionContext:
+        """Build immutable context for extraction.
+        
+        Handles hashing for both text-mode and file-mode documents.
+        """
+        # Hash document content
+        if doc.document.has_text and doc.document.text:
+            doc_hash = md5_hash(doc.document.text)
+        elif doc.document.has_file and doc.document.file_path:
+            doc_hash = hash_file(str(doc.document.file_path))
+        else:
+            doc_hash = None
+        
+        # Hash kernel template
+        kernel_hash = None
+        if hasattr(kernel, 'raw_content') and kernel.raw_content:
+            kernel_hash = md5_hash(kernel.raw_content)
+        
+        # Cache prefix rotation
+        prefix_idx = self._test_index % len(ZW_CHARS)
+        self._test_index += 1
+        
+        return ExtractionContext(
+            doc=doc,
+            model=model,
+            kernel=kernel,
+            timestamp=datetime.now(),
+            document_hash=doc_hash,
+            kernel_hash=kernel_hash,
+            gt_hash=md5_hash(str(doc.ground_truth)),
+            model_config_hash=hash_config(model),
+            cache_prefix=ZW_NAMES[prefix_idx],
+            cache_prefix_char=ZW_CHARS[prefix_idx],
+        )
+    
+    def _build_result(
+        self,
+        ctx: ExtractionContext,
+        fields: list[FieldResult],
+        raw_response: str | None = None,
+        latency_ms: float = 0.0,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        error: str | None = None,
+    ) -> DocumentResult:
+        """Build DocumentResult from context.
+        
+        Single place to construct results ensures consistency.
+        """
+        return DocumentResult(
+            doc_id=ctx.doc.document.id,
+            model=ctx.model.name,
+            kernel=ctx.kernel.name,
+            fields=fields,
+            raw_response=raw_response,
+            latency_ms=latency_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            error=error,
+            cache_prefix=ctx.cache_prefix,
+            timestamp=ctx.timestamp,
+            document_hash=ctx.document_hash,
+            kernel_hash=ctx.kernel_hash,
+            gt_hash=ctx.gt_hash,
+            model_config_hash=ctx.model_config_hash,
+            model_temperature=ctx.model.temperature,
+            model_max_tokens=ctx.model.max_tokens,
+        )
+    
+    def _extract_null_baseline(self, ctx: ExtractionContext) -> DocumentResult:
+        """Handle null baseline extraction (no API call).
+        
+        Null baseline returns empty extractions for all fields,
+        useful for testing scoring logic.
+        """
+        kernel = ctx.kernel
+        if not isinstance(kernel, NullBaseline):
+            raise ValueError("Expected NullBaseline kernel")
+        
+        extractions = kernel.extract_directly()
+        fields: list[FieldResult] = []
+        
+        # Provide defaults for optional document fields
+        doc_text = ctx.doc.document.text or ""
+        doc_pages = ctx.doc.document.pages or []
+        
+        for ext in extractions:
+            gt = ctx.doc.ground_truth.get(ext.field_name)
+            if not gt:
+                continue
+            
+            score = composite_score(ext, gt, doc_text, doc_pages)
+            
+            fields.append(FieldResult(
+                field_name=ext.field_name,
+                extracted_value=ext.value,
+                expected_value=gt.value,
+                quote=ext.evidence.quote,
+                page=ext.evidence.page,
+                status=ext.status.value,
+                value_score=score.value,
+                evidence_score=score.evidence,
+                page_score=score.page,
+                status_score=score.status,
+                schema_score=score.schema,
+                composite_score=score.composite,
+            ))
+        
+        return self._build_result(ctx, fields)
+    
     def _extract_single(
         self,
         doc: DocumentWithGroundTruth,
         model: ModelConfig,
         kernel: Kernel,
     ) -> DocumentResult:
-        """Extract from a single document. Returns raw response, no scoring."""
-
+        """Extract from a single document.
         
-        document_hash = md5_hash(doc.document.text)
-        kernel_hash = md5_hash(kernel.raw_content) if hasattr(kernel, 'raw_content') else None
-        gt_hash = md5_hash(str(doc.ground_truth)) 
-        model_config_hash = hash_config(model)
-        timestamp = datetime.now()
+        Returns raw response only - scoring happens in judge pass.
+        """
+        ctx = self._prepare_context(doc, model, kernel)
         
-        # Handle null baseline specially
+        # Null baseline: no API call needed
         if isinstance(kernel, NullBaseline):
-            extractions = kernel.extract_directly()
-            field_results = []
-
-            for ext in extractions:
-                gt = doc.ground_truth.get(ext.field_name)
-                if not gt:
-                    continue
-
-                score = composite_score(
-                    ext, gt, doc.document.text, doc.document.pages
-                )
-
-                field_results.append(FieldResult(
-                    field_name=ext.field_name,
-                    extracted_value=ext.value,
-                    expected_value=gt.value,
-                    quote=ext.evidence.quote,
-                    page=ext.evidence.page,
-                    status=ext.status.value,
-                    value_score=score.value,
-                    evidence_score=score.evidence,
-                    page_score=score.page,
-                    status_score=score.status,
-                    schema_score=score.schema,
-                    composite_score=score.composite,
-                ))
-
-            return DocumentResult(
-                doc_id=doc.document.id,
-                model=model.name,
-                kernel=kernel.name,
-                fields=field_results,
-                timestamp=timestamp,
-                document_hash=document_hash,
-                kernel_hash=kernel_hash,
-                gt_hash=gt_hash,
-                model_config_hash=model_config_hash,
-                model_temperature=model.temperature,
-                model_max_tokens=model.max_tokens,
+            return self._extract_null_baseline(ctx)
+        
+        # Validate document has content
+        if not doc.document.has_content:
+            return self._build_result(
+                ctx, 
+                fields=[], 
+                error="Document has no content (no text or file)",
             )
-
-        # Render prompt: system (kernel) + user (document)
+        
+        # Render prompt
+        # TODO: Update kernel.render() to accept Document instead of str
+        # For now, require text content
+        if not doc.document.has_text or not doc.document.text:
+            return self._build_result(
+                ctx,
+                fields=[],
+                error="Document has no text content (file-mode not yet supported)",
+            )
+        
         prompt = kernel.render(doc.document.text)
-
-        # Cache-bust prefix on user message (deterministic, logged)
-        prefix_idx = self._test_index % len(ZW_CHARS)
-        prefix_char = ZW_CHARS[prefix_idx]
-        prefix_name = ZW_NAMES[prefix_idx]
-        self._test_index += 1
-        salted_user = prefix_char + prompt.user
-
+        salted_user = ctx.cache_prefix_char + prompt.user
+        
+        # Make API call
         client = self._get_client(model)
-        start_time = time.time()
-
+        start = time.time()
+        
         try:
             result = client.complete(prompt.system, salted_user)
-            latency_ms = (time.time() - start_time) * 1000
         except Exception as e:
-            return DocumentResult(
-                doc_id=doc.document.id,
-                model=model.name,
-                kernel=kernel.name,
-                fields=[],
-                raw_response=None,
-                error=str(e),
-                cache_prefix=prefix_name,
-                timestamp=timestamp,
-                document_hash=document_hash,
-                kernel_hash=kernel_hash,
-                gt_hash=gt_hash,
-                model_config_hash=model_config_hash,
-                model_temperature=model.temperature,
-                model_max_tokens=model.max_tokens,
-            )
-
-        # Raw response only - no shaping, no scoring
-        return DocumentResult(
-            doc_id=doc.document.id,
-            model=model.name,
-            kernel=kernel.name,
+            return self._build_result(ctx, fields=[], error=str(e))
+        
+        latency_ms = (time.time() - start) * 1000
+        
+        return self._build_result(
+            ctx,
             fields=[],
             raw_response=result.text,
             latency_ms=latency_ms,
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
-            cache_prefix=prefix_name,
-            timestamp=timestamp,
-            document_hash=document_hash,
-            kernel_hash=kernel_hash,
-            gt_hash=gt_hash,
-            model_config_hash=model_config_hash,
-            model_temperature=model.temperature,
-            model_max_tokens=model.max_tokens,
         )
 
     # =========================================================================
@@ -222,6 +307,9 @@ class Runner:
 
         judge_prompt_path = self._data_dir.parent.parent / "prompts" / "judge.txt"
 
+        if not doc.document.text:
+            raise ValueError(f"Document {doc.document.id} has no text content for judging")
+        
         field_results = judge_extraction(
             judge_model=judge_model,
             judge_prompt_path=judge_prompt_path,

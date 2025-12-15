@@ -3,16 +3,14 @@
 
 GATE: All 10 must pass before any real evaluation.
 """
-import pytest
 from ctn_testing.core.types import (
     Extraction, 
-    GroundTruth, 
     Evidence, 
     ExtractionStatus,
     Candidate
 )
 from ctn_testing.metrics.scorer import composite_score
-
+from ctn_testing.core import GroundTruth
 
 def make_ext(
     field_name="total",

@@ -7,12 +7,13 @@ This prevents "cite anything plausible" from scoring high.
 import unicodedata
 
 from ..core.types import (
-    Extraction, 
-    GroundTruth, 
+    Extraction,  
     ExtractionStatus, 
     CompositeResult,
     Candidate
 )
+
+from ..core import GroundTruth
 
 
 def normalize_minimal(text: str) -> str:

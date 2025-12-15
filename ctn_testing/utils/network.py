@@ -118,7 +118,6 @@ def _make_openai_client(config: ModelConfig, retry_decorator) -> CompleteFunctio
     
     return complete
 
-
 _FACTORIES = {
     "anthropic": _make_anthropic_client,
     "google": _make_google_client,

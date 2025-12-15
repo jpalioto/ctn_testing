@@ -67,17 +67,6 @@ class Extraction:
         )
 
 
-@dataclass
-class GroundTruth:
-    field_name: str
-    exists_in_document: bool
-    is_ambiguous: bool = False
-    value: Any = None
-    acceptable_values: list[Any] = field(default_factory=list)
-    candidate_values: list[Any] = field(default_factory=list)
-    evidence_quote: str | None = None
-    evidence_page: int | None = None
-
 
 @dataclass(frozen=True)
 class CompositeResult:

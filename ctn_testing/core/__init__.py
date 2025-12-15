@@ -1,7 +1,6 @@
 """Core types and abstractions."""
 from .types import (
     Extraction,
-    GroundTruth,
     Evidence,
     Candidate,
     ExtractionStatus,
@@ -31,11 +30,18 @@ from .schemas import (
     GroundTruthDocumentSchema,
     ground_truth_from_schema,
 )
+from .document import (
+    Document, 
+    SUPPORTED_MEDIA_TYPES
+)
+from .ground_truth import(
+    GroundTruth, 
+    DocumentWithGroundTruth
+) 
 
 __all__ = [
     # Types
     "Extraction",
-    "GroundTruth", 
     "Evidence",
     "Candidate",
     "ExtractionStatus",
@@ -61,4 +67,9 @@ __all__ = [
     "GroundTruthFieldSchema",
     "GroundTruthDocumentSchema",
     "ground_truth_from_schema",
+    # Documents
+    "Document",
+    "GroundTruth",
+    "DocumentWithGroundTruth",
+    "SUPPORTED_MEDIA_TYPES"
 ]

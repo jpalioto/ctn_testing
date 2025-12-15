@@ -5,7 +5,7 @@ then convert to internal dataclass types for processing.
 """
 from typing import Any
 from pydantic import BaseModel, Field, field_validator
-
+from .ground_truth import GroundTruth
 
 # =============================================================================
 # LLM Response Parsing
@@ -176,9 +176,7 @@ def ground_truth_from_schema(
     field_name: str, 
     schema: GroundTruthFieldSchema
 ):
-    """Convert validated schema to internal GroundTruth type."""
-    from .types import GroundTruth
-    
+    """Convert validated schema to internal GroundTruth type."""    
     return GroundTruth(
         field_name=field_name,
         exists_in_document=schema.exists,
