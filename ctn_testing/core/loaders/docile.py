@@ -1,20 +1,22 @@
-"""DocILE dataset loader.
+"""DocILE dataset loader using official docile-benchmark library.
 
 DocILE is a large-scale document information extraction benchmark
 with native PDF documents and fine-grained annotations.
 
-Dataset structure:
+Requires: pip install docile-benchmark (or uv add docile-benchmark)
+
+Dataset structure (after download):
     docile/
         pdfs/
             {doc_id}.pdf
         ocr/
-            {doc_id}.json       # Optional OCR output
+            {doc_id}.json
         annotations/
-            {doc_id}.json       # Field-level annotations
+            {doc_id}.json
 
 Reference: https://github.com/rossumai/docile
+Paper: https://arxiv.org/abs/2302.05658
 """
-import json
 from pathlib import Path
 from typing import Iterator
 
@@ -22,83 +24,210 @@ from ..document import Document
 from ..ground_truth import DocumentWithGroundTruth, GroundTruth
 from .base import DatasetLoader
 
+# Optional dependency - graceful degradation
+try:
+    from docile.dataset import Dataset as DocileDataset
+    HAS_DOCILE = True
+except ImportError:
+    DocileDataset = None  # type: ignore
+    HAS_DOCILE = False
+
+
+# Field types available in DocILE (KILE task)
+# https://docile.rossum.ai/
+DOCILE_FIELD_TYPES = {
+    # Document identifiers
+    "document_id",
+    "order_id",
+    
+    # Dates
+    "date_issue",
+    "date_due",
+    
+    # Vendor info
+    "vendor_name",
+    "vendor_address",
+    "vendor_tax_id",
+    "vendor_email",
+    "vendor_phone",
+    
+    # Customer info
+    "customer_billing_name",
+    "customer_billing_address",
+    "customer_shipping_name",
+    "customer_shipping_address",
+    "customer_tax_id",
+    "customer_email",
+    "customer_phone",
+    
+    # Amounts
+    "amount_total_gross",
+    "amount_total_net",
+    "amount_total_tax",
+    "amount_due",
+    "amount_paid",
+    "amount_rounding",
+    
+    # Currency
+    "currency_code_amount_due",
+    
+    # Payment
+    "payment_terms",
+    "payment_reference",
+    "bank_account_number",
+    "bank_iban",
+    "bank_swift",
+    
+    # Line item fields (for LIR task - we skip these by default)
+    "line_item_description",
+    "line_item_quantity",
+    "line_item_unit_price",
+    "line_item_amount_gross",
+    "line_item_amount_net",
+    "line_item_tax_rate",
+    "line_item_tax_amount",
+    "line_item_order_id",
+    "line_item_product_code",
+}
+
 
 class DocILELoader(DatasetLoader):
-    """Loader for DocILE dataset format.
+    """Loader for DocILE dataset using official library.
     
-    DocILE provides:
-    - Native PDF documents (no synthetic generation)
-    - 55 field types for invoices
-    - Line item annotations
-    - Bounding box coordinates
-    
-    We extract field-level annotations and ignore spatial data
-    (our models use full document understanding, not layout).
+    Usage:
+        loader = DocILELoader(split="val")
+        docs = loader.load_all(Path("C:/path/to/docile"))
+        
+        # Or load a sample
+        docs = loader.load_sample(Path("C:/path/to/docile"), n=10)
+        
+        # Or iterate (memory efficient)
+        for doc in loader.iter_documents(Path("C:/path/to/docile")):
+            process(doc)
     """
     
-    # DocILE field types we care about (subset)
-    CORE_FIELDS = {
-        "invoice_id",
-        "invoice_date",
-        "due_date",
-        "vendor_name",
-        "vendor_address",
-        "customer_name", 
-        "customer_address",
-        "subtotal",
-        "total_tax",
-        "total_amount",
-        "currency",
-        "payment_terms",
-        "purchase_order",
-    }
-    
-    def __init__(self, include_all_fields: bool = False):
-        """Initialize loader.
+    def __init__(
+        self, 
+        split: str = "val",
+        include_line_items: bool = False,
+        load_ocr: bool = False,
+    ):
+        """Initialize DocILE loader.
         
         Args:
-            include_all_fields: If True, include all 55 DocILE fields.
-                               If False, only include CORE_FIELDS.
+            split: Dataset split - "train", "val", "test", or "trainval"
+            include_line_items: If True, include line item fields (LIR task).
+                               If False, only include document-level fields (KILE task).
+            load_ocr: If True, load OCR data into memory (slower but enables text access)
         """
-        self.include_all_fields = include_all_fields
+        if not HAS_DOCILE:
+            raise ImportError(
+                "docile-benchmark not installed. "
+                "Install with: uv add docile-benchmark"
+            )
+        
+        self.split = split
+        self.include_line_items = include_line_items
+        self.load_ocr = load_ocr
+    
+    def _get_pdf_path(self, dataset_path: Path, doc_id: str) -> Path | None:
+        """Find PDF file for document."""
+        # Try standard location
+        pdf_path = dataset_path / "pdfs" / f"{doc_id}.pdf"
+        if pdf_path.exists():
+            return pdf_path
+        
+        # Try annotated subdirectory structure
+        pdf_path = dataset_path / "annotated-trainval" / "pdfs" / f"{doc_id}.pdf"
+        if pdf_path.exists():
+            return pdf_path
+        
+        return None
+    
+    def _extract_ocr_text(self, doc) -> str | None:
+        """Extract full text from OCR if available."""
+        if not self.load_ocr:
+            return None
+        
+        try:
+            text_parts = []
+            for page_idx in range(doc.page_count):
+                words = doc.ocr.get_all_words(page_idx)
+                page_text = " ".join(w.text for w in words)
+                text_parts.append(page_text)
+            return "\n\n".join(text_parts)
+        except Exception:
+            return None
+    
+    def _is_line_item_field(self, fieldtype: str) -> bool:
+        """Check if field is a line item field."""
+        return fieldtype.startswith("line_item_")
     
     def iter_documents(self, dataset_path: Path) -> Iterator[DocumentWithGroundTruth]:
-        pdfs_dir = dataset_path / "pdfs"
-        annotations_dir = dataset_path / "annotations"
-        ocr_dir = dataset_path / "ocr"
+        """Iterate over DocILE documents.
         
-        if not pdfs_dir.exists():
-            raise FileNotFoundError(f"DocILE pdfs directory not found: {pdfs_dir}")
+        Args:
+            dataset_path: Path to DocILE dataset root
+            
+        Yields:
+            DocumentWithGroundTruth for each document
+        """
+        dataset = DocileDataset( # type: ignore[misc]
+            self.split, 
+            str(dataset_path),
+            load_ocr=self.load_ocr,
+        )
         
-        for pdf_path in sorted(pdfs_dir.glob("*.pdf")):
-            doc_id = pdf_path.stem
-            ann_path = annotations_dir / f"{doc_id}.json"
+        for doc in dataset:
+            # Find PDF path
+            pdf_path = self._get_pdf_path(dataset_path, doc.docid)
             
-            if not ann_path.exists():
-                print(f"Warning: No annotations for {doc_id}, skipping")
-                continue
+            # Extract OCR text if enabled
+            ocr_text = self._extract_ocr_text(doc) if self.load_ocr else None
             
-            # Load PDF as document
+            # Build Document
             document = Document(
-                id=doc_id,
+                id=doc.docid,
+                text=ocr_text,
                 file_path=pdf_path,
-                doc_type="invoice",  # DocILE is invoice-focused
+                doc_type="invoice",
                 source="docile",
+                metadata={
+                    "pages": doc.page_count,
+                    "split": self.split,
+                },
             )
             
-            # Optionally load OCR text as fallback
-            ocr_path = ocr_dir / f"{doc_id}.json"
-            if ocr_path.exists():
-                document.text = self._load_ocr_text(ocr_path)
+            # Build GroundTruth from annotations
+            ground_truth: dict[str, GroundTruth] = {}
             
-            # Load and convert annotations
-            with open(ann_path, encoding="utf-8") as f:
-                annotations = json.load(f)
+            for field in doc.annotation.fields:
+                fieldtype = field.fieldtype
+                
+                # Skip fields without fieldtype
+                if not fieldtype:
+                    continue
+                
+                # Skip line items unless requested
+                if self._is_line_item_field(fieldtype) and not self.include_line_items:
+                    continue
+                
+                # Handle duplicate field types - keep first, add others to acceptable_values
+                if fieldtype in ground_truth:
+                    existing = ground_truth[fieldtype]
+                    if field.text != existing.value:
+                        existing.acceptable_values.append(field.text)
+                    continue
+                
+                ground_truth[fieldtype] = GroundTruth(
+                    field_name=fieldtype,
+                    value=field.text,
+                    evidence_page=field.page,
+                    evidence_quote=field.text,
+                )
             
-            ground_truth = self._convert_annotations(annotations)
-            
+            # Skip documents with no usable fields
             if not ground_truth:
-                print(f"Warning: No usable fields for {doc_id}, skipping")
                 continue
             
             yield DocumentWithGroundTruth(
@@ -107,81 +236,43 @@ class DocILELoader(DatasetLoader):
             )
     
     def load_all(self, dataset_path: Path) -> list[DocumentWithGroundTruth]:
+        """Load all documents from dataset."""
         return list(self.iter_documents(dataset_path))
-    
-    def _load_ocr_text(self, ocr_path: Path) -> str:
-        """Extract text from DocILE OCR JSON."""
-        with open(ocr_path, encoding="utf-8") as f:
-            ocr_data = json.load(f)
-        
-        # DocILE OCR format has pages with words
-        text_parts = []
-        for page in ocr_data.get("pages", []):
-            for word in page.get("words", []):
-                text_parts.append(word.get("text", ""))
-        
-        return " ".join(text_parts)
-    
-    def _convert_annotations(self, annotations: dict) -> dict[str, GroundTruth]:
-        """Convert DocILE annotation format to our GroundTruth format.
-        
-        DocILE structure:
-        {
-            "field_annotations": [
-                {
-                    "fieldtype": "invoice_id",
-                    "text": "INV-001",
-                    "page": 0,
-                    "bbox": [x1, y1, x2, y2]
-                },
-                ...
-            ],
-            "line_item_annotations": [...]  # We skip these for now
-        }
-        """
-        ground_truth = {}
-        
-        for field_info in annotations.get("field_annotations", []):
-            field_type = field_info.get("fieldtype")
-            text = field_info.get("text", "").strip()
-            page = field_info.get("page", 0)
-            
-            # Skip if no field type or text
-            if not field_type or not text:
-                continue
-            
-            # Filter to core fields unless include_all_fields
-            if not self.include_all_fields and field_type not in self.CORE_FIELDS:
-                continue
-            
-            # Handle duplicate field types (take first occurrence)
-            if field_type in ground_truth:
-                # Add to acceptable_values instead
-                existing = ground_truth[field_type]
-                if text not in existing.acceptable_values and text != existing.value:
-                    existing.acceptable_values.append(text)
-                continue
-            
-            ground_truth[field_type] = GroundTruth(
-                field_name=field_type,
-                value=text,
-                evidence_page=page,
-            )
-        
-        return ground_truth
 
 
-def load_docile(dataset_path: Path, n: int | None = None) -> list[DocumentWithGroundTruth]:
+def load_docile(
+    dataset_path: Path | str,
+    split: str = "val",
+    n: int | None = None,
+    include_line_items: bool = False,
+    load_ocr: bool = False,
+) -> list[DocumentWithGroundTruth]:
     """Convenience function to load DocILE dataset.
     
     Args:
         dataset_path: Path to DocILE dataset root
+        split: Dataset split - "train", "val", "test", or "trainval"
         n: Optional limit on number of documents
+        include_line_items: If True, include line item fields
+        load_ocr: If True, load OCR text (slower)
         
     Returns:
         List of documents with ground truth
+        
+    Example:
+        # Load 10 validation documents
+        docs = load_docile("C:/data/docile", split="val", n=10)
+        
+        # Load all training documents with line items
+        docs = load_docile("C:/data/docile", split="train", include_line_items=True)
     """
-    loader = DocILELoader()
+    path = Path(dataset_path) if isinstance(dataset_path, str) else dataset_path
+    loader = DocILELoader(
+        split=split, 
+        include_line_items=include_line_items,
+        load_ocr=load_ocr,
+    )
+    
     if n is not None:
-        return loader.load_sample(dataset_path, n)
-    return loader.load_all(dataset_path)
+        return loader.load_sample(path, n)
+    return loader.load_all(path)
