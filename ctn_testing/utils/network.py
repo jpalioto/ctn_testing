@@ -1,6 +1,13 @@
-"""Network client with retry/backoff."""
+"""Network client with retry/backoff and multimodal support."""
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
+from anthropic.types import (
+    TextBlockParam,
+    ImageBlockParam,
+    DocumentBlockParam,
+    Base64ImageSourceParam,
+    Base64PDFSourceParam,
+)
 
 from tenacity import (
     retry,
@@ -11,7 +18,11 @@ from tenacity import (
 
 from ..core.config import ModelConfig
 
+if TYPE_CHECKING:
+    from ..runners.kernel import RenderedPrompt
+
 RETRYABLE_CODES = ["429", "500", "502", "503", "504", "529", "overloaded"]
+
 
 @dataclass(frozen=True)
 class CompletionResult:
@@ -22,7 +33,7 @@ class CompletionResult:
 
 
 class CompleteFunction(Protocol):
-    def __call__(self, system: str, user: str) -> CompletionResult: ...
+    def __call__(self, prompt: "RenderedPrompt") -> CompletionResult: ...
 
 
 def is_retryable(e: BaseException) -> bool:
@@ -41,13 +52,42 @@ def _make_anthropic_client(config: ModelConfig, retry_decorator) -> CompleteFunc
     client = Anthropic()
     
     @retry_decorator
-    def complete(system: str, user: str) -> CompletionResult:
+    def complete(prompt: "RenderedPrompt") -> CompletionResult:
+    
+        content: list[TextBlockParam | ImageBlockParam | DocumentBlockParam] = []
+        
+        if prompt.has_file and prompt.document:
+            doc = prompt.document
+            if not doc.media_type:
+                raise ValueError(f"Document {doc.id} has no media type")
+            
+            if doc.is_pdf:
+                content.append(DocumentBlockParam(
+                    type="document",
+                    source=Base64PDFSourceParam(
+                        type="base64",
+                        media_type="application/pdf",
+                        data=doc.file_base64(),
+                    ),
+                ))
+            elif doc.is_image:
+                content.append(ImageBlockParam(
+                    type="image",
+                    source=Base64ImageSourceParam(
+                        type="base64",
+                        media_type=doc.media_type,  # type: ignore[arg-type]
+                        data=doc.file_base64(),
+                    ),
+                ))
+        
+        content.append(TextBlockParam(type="text", text=prompt.user))
+        
         response = client.messages.create(
             model=config.name,
             max_tokens=config.max_tokens,
             temperature=config.temperature,
-            system=system,
-            messages=[{"role": "user", "content": user}]
+            system=prompt.system,
+            messages=[{"role": "user", "content": content}],
         )
         
         text = "".join(
@@ -66,16 +106,33 @@ def _make_anthropic_client(config: ModelConfig, retry_decorator) -> CompleteFunc
 
 def _make_google_client(config: ModelConfig, retry_decorator) -> CompleteFunction:
     from google import genai
+    from google.genai import types
     
     client = genai.Client()
     
     @retry_decorator
-    def complete(system: str, user: str) -> CompletionResult:
+    def complete(prompt: "RenderedPrompt") -> CompletionResult:
+        # Build content parts
+        parts: list = []
+        
+        # Add document file if present
+        if prompt.has_file and prompt.document:
+            doc = prompt.document
+            if not doc.media_type:
+                raise ValueError(f"Document {doc.id} has no media type")
+            parts.append(types.Part.from_bytes(
+                data=doc.file_bytes(),
+                mime_type=doc.media_type,
+            ))
+        
+        # Add text prompt
+        parts.append(types.Part.from_text(text=prompt.user))
+        
         response = client.models.generate_content(
             model=config.name,
-            contents=user,
+            contents=parts,
             config={
-                "system_instruction": system,
+                "system_instruction": prompt.system,
                 "temperature": config.temperature,
                 "max_output_tokens": config.max_tokens,
             }
@@ -99,14 +156,37 @@ def _make_openai_client(config: ModelConfig, retry_decorator) -> CompleteFunctio
     client = openai.OpenAI()
     
     @retry_decorator
-    def complete(system: str, user: str) -> CompletionResult:
+    def complete(prompt: "RenderedPrompt") -> CompletionResult:
+        # Build content array
+        content: list[dict] = []
+        
+        # Add document file if present (OpenAI only supports images)
+        if prompt.has_file and prompt.document:
+            doc = prompt.document
+            if doc.is_image:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{doc.media_type};base64,{doc.file_base64()}"
+                    }
+                })
+            elif doc.is_pdf:
+                # OpenAI doesn't support native PDF - fall back to text if available
+                if doc.has_text and doc.text:
+                    content.append({"type": "text", "text": f"[Document text]:\n{doc.text}"})
+                else:
+                    raise ValueError("OpenAI doesn't support native PDF. Provide text fallback.")
+        
+        # Add text prompt
+        content.append({"type": "text", "text": prompt.user})
+        
         response = client.chat.completions.create(
             model=config.name,
             temperature=config.temperature,
             max_tokens=config.max_tokens,
             messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "system", "content": prompt.system},
+                {"role": "user", "content": content},
             ]
         )
         
@@ -118,11 +198,13 @@ def _make_openai_client(config: ModelConfig, retry_decorator) -> CompleteFunctio
     
     return complete
 
+
 _FACTORIES = {
     "anthropic": _make_anthropic_client,
     "google": _make_google_client,
     "openai": _make_openai_client,
 }
+
 
 def make_client(config: ModelConfig) -> CompleteFunction:
     retry_decorator = retry(

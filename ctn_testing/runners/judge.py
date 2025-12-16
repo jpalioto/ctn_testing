@@ -9,6 +9,7 @@ from ..utils.network import make_client
 from .results import FieldResult
 from pydantic import BaseModel, field_validator
 from typing import Any
+from .kernel import RenderedPrompt
 
 
 @dataclass
@@ -93,9 +94,16 @@ def judge_extraction(
     
     log.debug("Judge prompt constructed", data={"prompt_length": len(user_prompt)})
     
+    prompt = RenderedPrompt(
+        system=system_prompt,
+        user=user_prompt,
+        kernel_name="judge",
+        document=None,
+    )
+
     # Call judge
     complete = make_client(judge_model)
-    result = complete(system_prompt, user_prompt)
+    result = complete(prompt)
     raw_judge_response = result.text
     
     log.debug("Judge raw response", data=raw_judge_response[:500] if len(raw_judge_response) > 500 else raw_judge_response)

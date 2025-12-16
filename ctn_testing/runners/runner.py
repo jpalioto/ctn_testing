@@ -9,9 +9,10 @@ from datetime import datetime
 from ..core import (
     EvaluationConfig,
     ModelConfig,
-    get_client,
     DocumentSchema,
 )
+from ..utils.network import make_client
+
 from ..metrics import composite_score
 from .kernel import Kernel, NullBaseline, load_kernel
 from .results import RunResults, DocumentResult, FieldResult
@@ -21,6 +22,7 @@ from ..utils.hashing import md5_hash, hash_config
 from ..core import DocumentWithGroundTruth
 from ..core.loaders import load_document_set
 from ..utils.hashing import hash_file
+from .kernel import Kernel, NullBaseline, RenderedPrompt
 
 # Zero-width characters for cache busting (invisible, deterministic)
 ZW_CHARS = ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff']
@@ -88,7 +90,7 @@ class Runner:
     def _get_client(self, model: ModelConfig):
         """Get or create client for model."""
         if model.name not in self._clients:
-            self._clients[model.name] = get_client(model)
+            self._clients[model.name] = make_client(model)
         return self._clients[model.name]
 
     def _get_kernel(self, kernel_name: str, kernel_path: str) -> Kernel:
@@ -257,25 +259,23 @@ class Runner:
                 error="Document has no content (no text or file)",
             )
         
-        # Render prompt
-        # TODO: Update kernel.render() to accept Document instead of str
-        # For now, require text content
-        if not doc.document.has_text or not doc.document.text:
-            return self._build_result(
-                ctx,
-                fields=[],
-                error="Document has no text content (file-mode not yet supported)",
-            )
+        # Render prompt (now accepts Document, handles text vs file mode)
+        prompt = kernel.render(doc.document)
         
-        prompt = kernel.render(doc.document.text)
-        salted_user = ctx.cache_prefix_char + prompt.user
+        # Apply cache-bust prefix to user message
+        salted_prompt = RenderedPrompt(
+            system=prompt.system,
+            user=ctx.cache_prefix_char + prompt.user,
+            kernel_name=prompt.kernel_name,
+            document=prompt.document,
+        )
         
         # Make API call
         client = self._get_client(model)
         start = time.time()
         
         try:
-            result = client.complete(prompt.system, salted_user)
+            result = client(salted_prompt)
         except Exception as e:
             return self._build_result(ctx, fields=[], error=str(e))
         
