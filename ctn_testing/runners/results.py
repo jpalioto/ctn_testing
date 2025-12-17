@@ -13,42 +13,31 @@ class FieldResult:
     field_name: str
     extracted_value: Any
     expected_value: Any
-    quote: str | None
-    page: int | None
-    status: str
-    
-    # Scores
-    value_score: float
-    evidence_score: float
-    page_score: float
-    status_score: float
-    schema_score: float
     composite_score: float
+    scores: dict[str, float] = field(default_factory=dict)
+    # Expected keys: exact, semantic, usable, complete
     
-    # Judge results (if applicable)
-    judge_scores: dict[str, float] = field(default_factory=dict)
+    def to_dict(self) -> dict:
+        """Serialize FieldResult to dict."""
+        return {
+            "field": self.field_name,
+            "extracted": self.extracted_value,
+            "expected": self.expected_value,
+            "composite": self.composite_score,
+            "scores": self.scores,
+        }
     
     @classmethod
     def from_dict(cls, d: dict) -> "FieldResult":
         """Reconstruct FieldResult from dict."""
-        scores = d.get("scores", {})
         return cls(
             field_name=d["field"],
             extracted_value=d["extracted"],
             expected_value=d["expected"],
-            quote=d["quote"],
-            page=d["page"],
-            status=d["status"],
-            value_score=scores.get("value", 0.0),
-            evidence_score=scores.get("evidence", 0.0),
-            page_score=scores.get("page", 0.0),
-            status_score=scores.get("status", 0.0),
-            schema_score=scores.get("schema", 0.0),
-            composite_score=scores.get("composite", 0.0),
-            judge_scores=d.get("judge_scores", {}),
+            composite_score=d.get("composite", 0.0),
+            scores=d.get("scores", {}),
         )
-
-
+    
 @dataclass
 class DocumentResult:
     """Result for a single document."""
@@ -62,6 +51,8 @@ class DocumentResult:
     raw_response: str | None = None
     judge_raw_response: str | None = None
     judge_outcome: str | None = None
+    # we include the GT in the outputs to enable repeat judging indepdent of extraction. 
+    ground_truth: dict[str, Any] | None = None 
     
     # Timing
     timestamp: datetime | None = None
@@ -101,9 +92,10 @@ class DocumentResult:
     
     @property
     def value_score(self) -> float:
+        """Semantic score average (primary value metric)."""
         if not self.fields:
             return 0.0
-        return sum(f.value_score for f in self.fields) / len(self.fields)
+        return sum(f.scores.get("semantic", 0.0) for f in self.fields) / len(self.fields)
     
     def to_dict(self) -> dict:
         return {
@@ -130,6 +122,7 @@ class DocumentResult:
             
             # Raw outputs
             "raw_response": self.raw_response,
+            "ground_truth": self.ground_truth,
             "judge_raw_response": self.judge_raw_response,
             "judge_outcome": self.judge_outcome,
             
@@ -152,26 +145,7 @@ class DocumentResult:
             "api_request_id": self.api_request_id,
             
             # Fields
-            "fields": [
-                {
-                    "field": f.field_name,
-                    "extracted": f.extracted_value,
-                    "expected": f.expected_value,
-                    "quote": f.quote,
-                    "page": f.page,
-                    "status": f.status,
-                    "scores": {
-                        "value": f.value_score,
-                        "evidence": f.evidence_score,
-                        "page": f.page_score,
-                        "status": f.status_score,
-                        "schema": f.schema_score,
-                        "composite": f.composite_score,
-                    },
-                    "judge_scores": f.judge_scores,
-                }
-                for f in self.fields
-            ],
+            "fields": [f.to_dict() for f in self.fields],
         }
     
     @classmethod
@@ -196,6 +170,7 @@ class DocumentResult:
             raw_response=d.get("raw_response"),
             judge_raw_response=d.get("judge_raw_response"),
             judge_outcome=d.get("judge_outcome"),
+            ground_truth=d.get("ground_truth"),
             
             # Timing
             timestamp=timestamp,

@@ -1,0 +1,40 @@
+name: "DocILE Quick Test"
+version: "1.0"
+
+dataset:
+  type: docile
+  path: "C:/Users/john_/code/docile/data/docile"
+  split: val
+  n: 5
+
+models:
+  - provider: anthropic
+    name: claude-sonnet-4-5
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+
+judge_models:
+  - provider: anthropic
+    name: claude-haiku-4-5
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.3
+    max_tokens: 2048
+
+judge_policy: single
+
+kernels:
+  - name: ctn
+    path: kernels/ctn.txt
+    enabled: true
+  - name: idiomatic
+    path: kernels/idiomatic.txt
+    enabled: true
+
+comparisons:
+  - a: ctn
+    b: idiomatic
+    primary: true
+
+execution:
+  delay: 0.0

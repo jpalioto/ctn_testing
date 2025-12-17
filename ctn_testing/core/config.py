@@ -7,6 +7,15 @@ from .models import ModelConfig
 
 
 @dataclass
+class DatasetConfig:
+    """External dataset configuration."""
+    type: str                    # "docile", "funsd", etc.
+    path: str                    # Path to dataset
+    split: str = "val"           # Dataset split
+    n: int | None = None         # Limit number of documents
+
+
+@dataclass
 class DocumentConfig:
     source: str = "synthetic"
     per_set: int = 100
@@ -91,22 +100,17 @@ class EvaluationConfig:
     execution: ExecutionConfig
     output: OutputConfig
     judge_policy: str = "match_provider"
-    name: str
-    version: str
-    documents: DocumentConfig
-    models: list[ModelConfig]
-    judge_models: list[ModelConfig]
-    kernels: list[KernelConfig]
-    comparisons: list[ComparisonConfig]
-    metrics: MetricsConfig
-    statistics: StatisticsConfig
-    execution: ExecutionConfig
-    output: OutputConfig
+    dataset: DatasetConfig | None = None  # External dataset (optional)
     
     @classmethod
     def from_yaml(cls, path: Path) -> "EvaluationConfig":
         with open(path) as f:
             data = yaml.safe_load(f)
+        
+        # Parse dataset if present
+        dataset = None
+        if "dataset" in data:
+            dataset = DatasetConfig(**data["dataset"])
         
         return cls(
             name=data.get("name", "unnamed"),
@@ -120,6 +124,8 @@ class EvaluationConfig:
             statistics=StatisticsConfig(**data.get("statistics", {})),
             execution=ExecutionConfig(**data.get("execution", {})),
             output=OutputConfig(**data.get("output", {})),
+            judge_policy=data.get("judge_policy", "match_provider"),
+            dataset=dataset,
         )
     
     def enabled_kernels(self) -> list[KernelConfig]:

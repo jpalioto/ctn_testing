@@ -21,15 +21,11 @@ class JudgeResult:
 
 class JudgeVerdict(BaseModel):
     field: str
-    extracted_value: Any = None
-    value_correct: bool = False
-    evidence_valid: bool | None = None
-    page_correct: bool | None = None
-    status_correct: bool = False
-    extracted_quote: str | None = None
-    extracted_page: int | None = None
-    extracted_status: str = "ok"
-
+    extracted: Any = None
+    exact_match: bool = False
+    semantic_match: bool = False
+    usable: bool = False
+    complete: bool = False
 
 class JudgeResponse(BaseModel):
     verdicts: list[JudgeVerdict]
@@ -60,7 +56,6 @@ def load_judge_prompt(path: Path) -> str:
 def judge_extraction(
     judge_model: ModelConfig,
     judge_prompt_path: Path,
-    document_text: str,
     ground_truth: dict[str, GroundTruth],
     raw_response: str,
 ) -> JudgeResult:
@@ -87,9 +82,8 @@ def judge_extraction(
         }
     
     user_prompt = user_template.format(
-        document=document_text,
         ground_truth=json.dumps(gt_formatted, indent=2),
-        model_output=raw_response,
+        candidate=raw_response,
     )
     
     log.debug("Judge prompt constructed", data={"prompt_length": len(user_prompt)})
@@ -139,7 +133,7 @@ def judge_extraction(
     
     log.debug("Parsed verdicts", data={"count": len(verdicts)})
     
-    # Convert to FieldResults
+   # Convert to FieldResults
     field_results = []
     for v in verdicts:
         field_name = v.field
@@ -149,33 +143,27 @@ def judge_extraction(
             
         gt = ground_truth.get(field_name)
         
-        value_score = 0.0 if v.value_correct is False else 1.0
-        evidence_score = 0.0 if v.evidence_valid is False else 1.0
-        page_score = 0.0 if v.page_correct is False else 1.0
-        status_score = 0.0 if v.status_correct is False else 1.0
-        schema_score = 1.0
+        scores = {
+            "exact": 1.0 if v.exact_match else 0.0,
+            "semantic": 1.0 if v.semantic_match else 0.0,
+            "usable": 1.0 if v.usable else 0.0,
+            "complete": 1.0 if v.complete else 0.0,
+        }
         
+        # Composite: semantic-heavy weighting
         composite = (
-            0.40 * value_score +
-            0.25 * evidence_score +
-            0.10 * page_score +
-            0.10 * status_score +
-            0.15 * schema_score
+            0.10 * scores["exact"] +
+            0.40 * scores["semantic"] +
+            0.30 * scores["usable"] +
+            0.20 * scores["complete"]
         )
         
         field_results.append(FieldResult(
             field_name=field_name,
-            extracted_value=v.extracted_value,
+            extracted_value=v.extracted,
             expected_value=gt.value if gt else None,
-            quote=v.extracted_quote,
-            page=v.extracted_page,
-            status=v.extracted_status,
-            value_score=value_score,
-            evidence_score=evidence_score,
-            page_score=page_score,
-            status_score=status_score,
-            schema_score=schema_score,
             composite_score=composite,
+            scores=scores,
         ))
     
     log.debug("Built field results", data={"count": len(field_results)})

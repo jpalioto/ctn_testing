@@ -33,7 +33,8 @@ ZW_NAMES = ['ZWSP', 'ZWNJ', 'ZWJ', 'WJ', 'BOM']
 class RunConfig:
     """Runtime configuration for a run."""
     config: EvaluationConfig
-    data_dir: Path
+    domain_dir: Path          
+    data_dir: Path | None
     output_dir: Path
     schema: DocumentSchema
     verbose: bool = True
@@ -80,6 +81,7 @@ class Runner:
         self._results: RunResults | None = None
         self._clients: dict[str, Any] = {}
         self._kernels: dict[str, Kernel] = {}
+        self._domain_dir = run_config.domain_dir
 
         self._test_index = 0
 
@@ -96,7 +98,7 @@ class Runner:
     def _get_kernel(self, kernel_name: str, kernel_path: str) -> Kernel:
         """Get or create kernel."""
         if kernel_name not in self._kernels:
-            path = self._data_dir.parent.parent / kernel_path
+            path = self._domain_dir / kernel_path
             self._kernels[kernel_name] = load_kernel(path, self._schema)
         return self._kernels[kernel_name]
 
@@ -174,12 +176,18 @@ class Runner:
         
         Single place to construct results ensures consistency.
         """
+
+        gt_serialized = {
+            name: gt.to_dict() for name, gt in ctx.doc.ground_truth.items()
+        }
+
         return DocumentResult(
             doc_id=ctx.doc.document.id,
             model=ctx.model.name,
             kernel=ctx.kernel.name,
             fields=fields,
             raw_response=raw_response,
+            ground_truth=gt_serialized,
             latency_ms=latency_ms,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
@@ -222,15 +230,13 @@ class Runner:
                 field_name=ext.field_name,
                 extracted_value=ext.value,
                 expected_value=gt.value,
-                quote=ext.evidence.quote,
-                page=ext.evidence.page,
-                status=ext.status.value,
-                value_score=score.value,
-                evidence_score=score.evidence,
-                page_score=score.page,
-                status_score=score.status,
-                schema_score=score.schema,
                 composite_score=score.composite,
+                scores={
+                    "exact": score.value,
+                    "semantic": score.value,
+                    "usable": score.value,
+                    "complete": score.value,
+                },
             ))
         
         return self._build_result(ctx, fields)
@@ -293,7 +299,6 @@ class Runner:
     # =========================================================================
     # Pass 2: Judging
     # =========================================================================
-
     def _judge_single(
         self,
         doc: DocumentWithGroundTruth,
@@ -301,30 +306,23 @@ class Runner:
         judge_model: ModelConfig,
     ) -> JudgeResult:
         """Judge a single extraction. Returns scored fields."""
-
         if not result.raw_response:
             return JudgeResult(fields=[], raw_response="", outcome="ERROR: no raw response")
-
-        judge_prompt_path = self._data_dir.parent.parent / "prompts" / "judge.txt"
-
-        if not doc.document.text:
-            raise ValueError(f"Document {doc.document.id} has no text content for judging")
+        
+        judge_prompt_path = self._domain_dir / "prompts" / "judge"
         
         field_results = judge_extraction(
             judge_model=judge_model,
             judge_prompt_path=judge_prompt_path,
-            document_text=doc.document.text,
             ground_truth=doc.ground_truth,
             raw_response=result.raw_response,
         )
-
         return field_results
 
     # =========================================================================
     # Orchestration
     # =========================================================================
-
-    def run(self) -> RunResults:
+    def run(self, documents: list[DocumentWithGroundTruth] | None = None) -> RunResults:
         """Execute the full evaluation: extract then judge."""
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -334,19 +332,37 @@ class Runner:
             started_at=datetime.now(),
         )
 
-        self._log(f"Loading documents from {self._data_dir}...")
-        documents = load_document_set(self._data_dir)
-        self._log(f"  Loaded {len(documents)} documents")
-
-        # Build lookup for documents by id
+        documents = self._load_documents(documents)
         docs_by_id = {doc.document.id: doc for doc in documents}
 
+        self._run_extraction_pass(documents)
+        self._run_judging_pass(docs_by_id)
+        self._finalize_and_save(run_id)
+        self._print_summary()
+
+        return self._results
+
+    def _load_documents(
+        self, 
+        documents: list[DocumentWithGroundTruth] | None
+    ) -> list[DocumentWithGroundTruth]:
+        """Load documents from data_dir or use pre-loaded."""
+        if documents is None:
+            if self._data_dir is None:
+                raise ValueError("data_dir required when documents not pre-loaded")
+            self._log(f"Loading documents from {self._data_dir}...")
+            documents = load_document_set(self._data_dir)
+        else:
+            self._log(f"Using {len(documents)} pre-loaded documents...")
+        
+        self._log(f"  Loaded {len(documents)} documents")
+        return documents
+
+    def _run_extraction_pass(self, documents: list[DocumentWithGroundTruth]) -> None:
+        """Pass 1: Extract from all documents."""
         matrix = self._config.run_matrix()
         total_runs = len(matrix) * len(documents)
 
-        # =====================================================================
-        # Pass 1: Extract
-        # =====================================================================
         self._log(f"\n{'='*60}")
         self._log("PASS 1: EXTRACTION")
         self._log(f"{'='*60}")
@@ -372,89 +388,96 @@ class Runner:
                 if self._config.execution.delay > 0:
                     time.sleep(self._config.execution.delay)
 
-        # =====================================================================
-        # Pass 2: Judge
-        # =====================================================================
-        self._log(f"\n{'='*60}")
+    def _run_judging_pass(self, docs_by_id: dict[str, DocumentWithGroundTruth]) -> None:
+        """Pass 2: Judge all extractions."""
         judge_names = [j.name for j in self._config.judge_models] if self._config.judge_models else ["none"]
+        
+        self._log(f"\n{'='*60}")
         self._log(f"PASS 2: JUDGING (policy={self._config.judge_policy}, judges={judge_names})")
         self._log(f"{'='*60}")
 
         results_to_judge = [r for r in self._results.results.values() if r.raw_response and not r.error]
         self._log(f"Judging {len(results_to_judge)} extractions...")
 
-        judged = 0
-        for result in results_to_judge:
-            doc = docs_by_id.get(result.doc_id)
-            if not doc:
-                continue
+        for idx, result in enumerate(results_to_judge):
+            self._judge_single_result(result, docs_by_id, idx, len(results_to_judge))
 
-            # Get judge for this model
-            model_config = next(
-                (m for m in self._config.models if m.name == result.model),
-                None
-            )
-            if not model_config:
-                continue
+    def _judge_single_result(
+        self,
+        result: DocumentResult,
+        docs_by_id: dict[str, DocumentWithGroundTruth],
+        idx: int,
+        total: int,
+    ) -> None:
+        """Judge a single extraction result."""
+        doc = docs_by_id.get(result.doc_id)
+        if not doc:
+            return
 
-            judges = self._get_judges(model_config)
-            if not judges:
-                self._log(f"  [{judged + 1}/{len(results_to_judge)}] {result.model} × {result.kernel} × {result.doc_id}: NO JUDGE")
-                judged += 1
-                continue
+        model_config = next(
+            (m for m in self._config.models if m.name == result.model),
+            None
+        )
+        if not model_config:
+            return
 
-            self._log(f"  [{judged + 1}/{len(results_to_judge)}] {result.model} × {result.kernel} × {result.doc_id}")
+        judges = self._get_judges(model_config)
+        if not judges:
+            self._log(f"  [{idx + 1}/{total}] {result.model} × {result.kernel} × {result.doc_id}: NO JUDGE")
+            return
 
-            try:
-                result.fields = []
-                result.judge_raw_response = None
-                result.judge_outcome = "PENDING"
-                
-                judge_result = self._judge_single(doc, result, judges[0])
-                
-                result.fields = judge_result.fields
-                result.judge_raw_response = judge_result.raw_response
-                result.judge_outcome = judge_result.outcome
+        self._log(f"  [{idx + 1}/{total}] {result.model} × {result.kernel} × {result.doc_id}")
 
-                # Add judge reproducibility info
-                result.judge_model = judges[0].name
-                result.judge_temperature = judges[0].temperature
-                result.judge_max_tokens = judges[0].max_tokens
-                result.judge_config_hash = hash_config(judges[0])
+        try:
+            result.fields = []
+            result.judge_raw_response = None
+            result.judge_outcome = "PENDING"
             
-                judge_prompt_path = self._data_dir.parent.parent / "prompts" / "judge_system.txt"
-                if judge_prompt_path.exists():
-                    result.judge_prompt_hash = md5_hash(judge_prompt_path.read_text())
-                    
-                if judge_result.outcome == "OK":
-                    self._log(f"    Composite: {result.composite_score:.2f}")
-                elif judge_result.outcome.startswith("ERROR:"):
-                    self._log(f"    {judge_result.outcome}")
-                else:
-                    raise ValueError(f"Unexpected judge outcome: {judge_result.outcome}")
-                    
-            except Exception as e:
-                existing = result.judge_outcome or "PENDING"
-                result.judge_outcome = f"ERROR: {existing} | {e}"
-                self._log(f"    {result.judge_outcome}")
+            judge_result = self._judge_single(doc, result, judges[0])
+            
+            result.fields = judge_result.fields
+            result.judge_raw_response = judge_result.raw_response
+            result.judge_outcome = judge_result.outcome
 
-            judged += 1
+            # Add judge reproducibility info
+            result.judge_model = judges[0].name
+            result.judge_temperature = judges[0].temperature
+            result.judge_max_tokens = judges[0].max_tokens
+            result.judge_config_hash = hash_config(judges[0])
+        
+            judge_prompt_path = self._domain_dir / "prompts" / "judge_system.txt"
+            if judge_prompt_path.exists():
+                result.judge_prompt_hash = md5_hash(judge_prompt_path.read_text())
+                
+            if judge_result.outcome == "OK":
+                self._log(f"    Composite: {result.composite_score:.2f}")
+            elif judge_result.outcome.startswith("ERROR:"):
+                self._log(f"    {judge_result.outcome}")
+            else:
+                raise ValueError(f"Unexpected judge outcome: {judge_result.outcome}")
+                
+        except Exception as e:
+            existing = result.judge_outcome or "PENDING"
+            result.judge_outcome = f"ERROR: {existing} | {e}"
+            self._log(f"    {result.judge_outcome}")
 
-            if self._config.execution.delay > 0:
-                time.sleep(self._config.execution.delay)
+        if self._config.execution.delay > 0:
+            time.sleep(self._config.execution.delay)
 
-        # =====================================================================
-        # Finalize
-        # =====================================================================
+    def _finalize_and_save(self, run_id: str) -> None:
+        """Finalize results and save to disk."""
         self._results.completed_at = datetime.now()
-
         self._log(f"\nSaving results to {self._output_dir}...")
         self._results.save(self._output_dir / f"run_{run_id}")
 
+    def _print_summary(self) -> None:
+        """Print evaluation summary."""
         self._log("\n" + "=" * 60)
         self._log("SUMMARY")
         self._log("=" * 60)
+        
         summary = self._results.summary()
+        
         for key, stats in summary.get("by_model_kernel", {}).items():
             model, kernel = key.split("|")
             self._log(f"{model} × {kernel}:")
@@ -472,26 +495,50 @@ class Runner:
                 self._log(f"    Delta = {comp['mean_diff']:+.3f} ({comp['effect_interpretation']} effect)")
                 self._log(f"    p = {comp['p_value']:.3f}, n = {comp['n']}")
 
-        return self._results
-
 
 def run_evaluation(
     config_path: Path,
-    data_dir: Path,
+    data_dir: Path | None,
     output_dir: Path,
     schema: DocumentSchema,
+    documents: list[DocumentWithGroundTruth] | None = None,
     verbose: bool = True,
 ) -> RunResults:
-    """Convenience function to run an evaluation."""
+    """Convenience function to run an evaluation.
+    
+    Args:
+        config_path: Path to config YAML
+        data_dir: Path to data directory (optional if config has dataset)
+        output_dir: Path to output directory
+        schema: Document schema
+        documents: Pre-loaded documents (optional, loaded from data_dir/config if not provided)
+        verbose: Print progress
+    """
     config = EvaluationConfig.from_yaml(config_path)
-
+    if documents is None:
+        if config.dataset:
+            if config.dataset.type == "docile":
+                from ..core.loaders import load_docile
+                documents = load_docile(
+                    config.dataset.path,
+                    split=config.dataset.split,
+                    n=config.dataset.n,
+                )
+            else:
+                raise ValueError(f"Unknown dataset type: {config.dataset.type}")
+        elif data_dir:
+            documents = load_document_set(data_dir)
+        else:
+            raise ValueError("Either data_dir or config.dataset required")
+    
     run_config = RunConfig(
         config=config,
+        domain_dir=config_path.parent.parent,
         data_dir=data_dir,
         output_dir=output_dir,
         schema=schema,
         verbose=verbose,
     )
-
+    
     runner = Runner(run_config)
-    return runner.run()
+    return runner.run(documents=documents)
