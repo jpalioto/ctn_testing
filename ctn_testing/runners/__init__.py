@@ -4,6 +4,15 @@ from ..core.loaders import load_document_set
 from .kernel import Kernel, TextKernel, NullBaseline, load_kernel
 from .results import FieldResult, DocumentResult, RunResults
 from .runner import Runner, RunConfig, run_evaluation
+from .http_runner import SDKRunner, SDKResponse, SDKError
+from .constraint_runner import (
+    ConstraintConfig,
+    PromptConfig,
+    RunResult,
+    ConstraintRunner,
+    load_prompts,
+    load_constraints,
+)
 
 __all__ = [
     # Document (re-exported from core)
@@ -23,4 +32,15 @@ __all__ = [
     "Runner",
     "RunConfig",
     "run_evaluation",
+    # HTTP Runner (SDK integration)
+    "SDKRunner",
+    "SDKResponse",
+    "SDKError",
+    # Constraint Runner
+    "ConstraintConfig",
+    "PromptConfig",
+    "RunResult",
+    "ConstraintRunner",
+    "load_prompts",
+    "load_constraints",
 ]
