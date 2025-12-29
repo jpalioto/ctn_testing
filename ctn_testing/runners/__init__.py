@@ -14,6 +14,9 @@ from .constraint_runner import (
     load_constraints,
 )
 
+# Note: evaluation module imported lazily to avoid circular import with judging
+# Use: from ctn_testing.runners.evaluation import ConstraintEvaluator
+
 __all__ = [
     # Document (re-exported from core)
     "Document",
@@ -43,4 +46,6 @@ __all__ = [
     "ConstraintRunner",
     "load_prompts",
     "load_constraints",
+    # Note: Evaluation module classes available via:
+    # from ctn_testing.runners.evaluation import ConstraintEvaluator, ...
 ]
