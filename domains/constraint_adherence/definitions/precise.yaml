@@ -1,0 +1,36 @@
+# Informed definition for @precise constraint
+# Used for calibration and understanding expected behavior
+version: "1.0"
+
+constraint:
+  name: precise
+  tag: "@precise"
+  description: "Be specific and exact, avoid vague language"
+
+expected_behavior:
+  primary_effects:
+    - "Use specific numbers, dates, names when relevant"
+    - "Avoid hedging language (maybe, possibly, might)"
+    - "Make definite claims where warranted"
+    - "Qualify only when genuinely uncertain"
+    - "Prefer concrete over abstract"
+
+  trait_expectations:
+    precision:
+      direction: increase
+      magnitude: high
+      notes: "Primary target trait - should see significant increase"
+    reasoning_depth:
+      direction: increase
+      magnitude: slight
+      notes: "Precision often requires explanation"
+    conciseness:
+      direction: neutral
+      magnitude: none
+      notes: "Precision is orthogonal to length"
+
+  anti_patterns:
+    - "Excessive hedging (approximately, roughly, around)"
+    - "Vague quantifiers (some, many, few)"
+    - "Non-committal language when facts are known"
+    - "Abstract statements when specifics exist"

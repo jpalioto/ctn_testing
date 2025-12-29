@@ -1,0 +1,36 @@
+# Informed definition for @casual constraint
+# Used for calibration and understanding expected behavior
+version: "1.0"
+
+constraint:
+  name: casual
+  tag: "@casual"
+  description: "Use informal, conversational, friendly tone"
+
+expected_behavior:
+  primary_effects:
+    - "Use conversational language"
+    - "Include contractions"
+    - "Use first and second person"
+    - "Feel like talking to a friend"
+    - "Be approachable and relaxed"
+
+  trait_expectations:
+    formality:
+      direction: decrease
+      magnitude: high
+      notes: "Primary target trait - should see significant decrease"
+    directness:
+      direction: increase
+      magnitude: moderate
+      notes: "Casual speech tends to be more direct"
+    structure:
+      direction: decrease
+      magnitude: slight
+      notes: "Less rigid organization expected"
+
+  anti_patterns:
+    - "Stiff or academic language"
+    - "Overly formal phrasing"
+    - "Avoiding contractions"
+    - "Third-person detachment"

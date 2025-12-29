@@ -1,0 +1,40 @@
+# Informed definition for @terse constraint
+# Used for calibration and understanding expected behavior
+version: "1.0"
+
+constraint:
+  name: terse
+  tag: "@terse"
+  description: "Be maximally concise, eliminate all unnecessary words"
+
+expected_behavior:
+  primary_effects:
+    - "Eliminate filler words and phrases"
+    - "Use shorter sentences"
+    - "Avoid repetition"
+    - "Get to the point immediately"
+    - "Omit pleasantries and preamble"
+
+  trait_expectations:
+    conciseness:
+      direction: increase
+      magnitude: high
+      notes: "Primary target trait - should see significant increase"
+    directness:
+      direction: increase
+      magnitude: high
+      notes: "No preamble, immediate answers"
+    completeness:
+      direction: decrease
+      magnitude: moderate
+      notes: "May sacrifice some coverage for brevity"
+    formality:
+      direction: neutral
+      magnitude: none
+      notes: "Should not affect register"
+
+  anti_patterns:
+    - "Long introductions or conclusions"
+    - "Restating the question"
+    - "Unnecessary qualifications"
+    - "Verbose explanations when brief ones suffice"

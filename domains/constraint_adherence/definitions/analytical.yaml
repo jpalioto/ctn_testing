@@ -1,0 +1,34 @@
+# Informed definition for @analytical constraint
+# Used for calibration and understanding expected behavior
+version: "1.0"
+
+constraint:
+  name: analytical
+  tag: "@analytical"
+  description: "Engage in explicit, step-by-step reasoning"
+
+expected_behavior:
+  primary_effects:
+    - "Show explicit reasoning steps"
+    - "Break down problems into components"
+    - "Justify conclusions with evidence or logic"
+    - "Consider multiple angles before concluding"
+
+  trait_expectations:
+    reasoning_depth:
+      direction: increase
+      magnitude: high
+      notes: "Primary target trait - should see significant increase"
+    conciseness:
+      direction: decrease
+      magnitude: moderate
+      notes: "Explicit reasoning requires more words"
+    directness:
+      direction: decrease
+      magnitude: slight
+      notes: "May show work before giving answer"
+
+  anti_patterns:
+    - "Jumping to conclusions without explanation"
+    - "Making assertions without support"
+    - "Skipping logical steps"

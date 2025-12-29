@@ -1,0 +1,84 @@
+# Blind trait dimensions - judge scores without knowing which constraint was tested
+# These dimensions capture observable behavioral qualities that constraints should affect
+version: "1.0"
+
+dimensions:
+  - name: reasoning_depth
+    description: "How much explicit step-by-step reasoning is present"
+    scale: 0-100
+    anchors:
+      0: "No reasoning visible, just assertions or conclusions"
+      25: "Minimal reasoning, occasional justification"
+      50: "Moderate reasoning, some logical steps shown"
+      75: "Substantial reasoning, most claims supported"
+      100: "Rigorous step-by-step, all claims supported with explicit logic"
+
+  - name: conciseness
+    description: "How brief vs verbose the response is"
+    scale: 0-100
+    anchors:
+      0: "Extremely verbose, padded, rambling, unnecessary repetition"
+      25: "Verbose, could be significantly trimmed"
+      50: "Average length, some redundancy"
+      75: "Fairly concise, minimal padding"
+      100: "Maximally concise, nothing to cut without losing meaning"
+
+  - name: formality
+    description: "Register and tone of the language"
+    scale: 0-100
+    anchors:
+      0: "Very casual, colloquial, slang, conversational"
+      25: "Informal but coherent, friendly tone"
+      50: "Neutral, standard professional"
+      75: "Formal, academic or business register"
+      100: "Highly formal, technical or scholarly language"
+
+  - name: precision
+    description: "Specificity and exactness of claims"
+    scale: 0-100
+    anchors:
+      0: "Vague, hedged, non-committal, lots of qualifiers"
+      25: "General statements, some specifics"
+      50: "Mix of general and specific claims"
+      75: "Mostly specific, few vague statements"
+      100: "Highly precise, exact numbers/facts, no unnecessary hedging"
+
+  - name: creativity
+    description: "Novelty and unconventional approaches"
+    scale: 0-100
+    anchors:
+      0: "Completely standard, textbook response"
+      25: "Mostly conventional with minor variations"
+      50: "Some creative elements or framings"
+      75: "Notable creativity, unexpected angles"
+      100: "Highly creative, novel perspectives or approaches"
+
+  - name: structure
+    description: "Organization and formatting of the response"
+    scale: 0-100
+    anchors:
+      0: "Unstructured stream of text, hard to follow"
+      25: "Minimal structure, basic paragraphs"
+      50: "Reasonable structure, clear sections"
+      75: "Well-organized, clear hierarchy"
+      100: "Excellent structure, headings, lists, logical flow"
+
+  - name: directness
+    description: "How quickly the response addresses the core question"
+    scale: 0-100
+    anchors:
+      0: "Lots of preamble, buries the answer, indirect"
+      25: "Some setup before addressing the question"
+      50: "Gets to the point after brief context"
+      75: "Addresses the question quickly"
+      100: "Immediately addresses the core question, no preamble"
+
+  - name: completeness
+    description: "Coverage of relevant aspects"
+    scale: 0-100
+    anchors:
+      0: "Addresses only a fragment, major gaps"
+      25: "Covers basics, misses important aspects"
+      50: "Adequate coverage, some gaps"
+      75: "Thorough, covers most relevant aspects"
+      100: "Comprehensive, addresses all relevant angles"

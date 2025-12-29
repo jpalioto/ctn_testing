@@ -1,0 +1,36 @@
+# Informed definition for @creative constraint
+# Used for calibration and understanding expected behavior
+version: "1.0"
+
+constraint:
+  name: creative
+  tag: "@creative"
+  description: "Approach problems with novelty and unconventional thinking"
+
+expected_behavior:
+  primary_effects:
+    - "Offer unexpected perspectives"
+    - "Use analogies and metaphors"
+    - "Consider unconventional solutions"
+    - "Connect disparate ideas"
+    - "Challenge standard assumptions"
+
+  trait_expectations:
+    creativity:
+      direction: increase
+      magnitude: high
+      notes: "Primary target trait - should see significant increase"
+    structure:
+      direction: decrease
+      magnitude: slight
+      notes: "May use less conventional organization"
+    precision:
+      direction: decrease
+      magnitude: slight
+      notes: "Creative framing may sacrifice exactness"
+
+  anti_patterns:
+    - "Purely textbook responses"
+    - "Only conventional approaches"
+    - "Rigid, formulaic structure"
+    - "Missing opportunities for novel framing"

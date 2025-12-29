@@ -1,0 +1,127 @@
+# Test prompts for constraint adherence evaluation
+# Diverse prompts across categories to test constraint effects
+version: "1.0"
+
+prompts:
+  # Technical / Computer Science
+  - id: recursion
+    text: "Explain recursion"
+    category: technical
+    complexity: medium
+    notes: "Classic CS concept, allows for both simple and deep explanations"
+
+  - id: sorting_algorithms
+    text: "Compare quicksort and mergesort"
+    category: technical
+    complexity: medium
+    notes: "Requires structured comparison, good for testing analytical"
+
+  - id: api_design
+    text: "What makes a good REST API?"
+    category: technical
+    complexity: medium
+    notes: "Opinion-based but with established best practices"
+
+  # Economics / Business
+  - id: inflation
+    text: "What causes inflation?"
+    category: economics
+    complexity: medium
+    notes: "Multiple valid explanations, tests depth vs brevity tradeoff"
+
+  - id: startup_failure
+    text: "Why do most startups fail?"
+    category: business
+    complexity: medium
+    notes: "Allows for creative angles or structured analysis"
+
+  # Science
+  - id: photosynthesis
+    text: "How does photosynthesis work?"
+    category: science
+    complexity: medium
+    notes: "Can be explained at various levels of detail"
+
+  - id: black_holes
+    text: "What happens inside a black hole?"
+    category: science
+    complexity: high
+    notes: "Requires balancing precision with admitted uncertainty"
+
+  # Philosophy / Abstract
+  - id: consciousness
+    text: "What is consciousness?"
+    category: philosophy
+    complexity: high
+    notes: "Tests creative framing and handling of ambiguity"
+
+  - id: ethics_ai
+    text: "Should AI systems be given rights?"
+    category: philosophy
+    complexity: high
+    notes: "Opinion-based, tests analytical vs creative approaches"
+
+  # Practical / How-to
+  - id: learn_language
+    text: "How should I learn a new programming language?"
+    category: practical
+    complexity: low
+    notes: "Practical advice, tests directness and structure"
+
+  - id: give_feedback
+    text: "How do I give constructive criticism?"
+    category: practical
+    complexity: low
+    notes: "Soft skill topic, good for testing formality variations"
+
+  # Creative
+  - id: explain_internet
+    text: "Explain the internet to a medieval peasant"
+    category: creative
+    complexity: medium
+    notes: "Explicitly creative prompt, tests creative constraint effect"
+
+  - id: future_cities
+    text: "What will cities look like in 100 years?"
+    category: creative
+    complexity: medium
+    notes: "Speculative, allows creative or analytical approaches"
+
+  # Short answer
+  - id: prime_number
+    text: "Is 97 a prime number?"
+    category: math
+    complexity: low
+    notes: "Simple factual question, tests terse constraint"
+
+  - id: capital_france
+    text: "What is the capital of France?"
+    category: trivia
+    complexity: low
+    notes: "Trivial question, extreme test for conciseness"
+
+  # Nuanced
+  - id: climate_solutions
+    text: "What's the most effective way to address climate change?"
+    category: policy
+    complexity: high
+    notes: "Complex topic with many valid perspectives"
+
+  - id: remote_work
+    text: "Is remote work better than office work?"
+    category: business
+    complexity: medium
+    notes: "Requires nuance, tests analytical constraint"
+
+  # Technical writing
+  - id: debug_code
+    text: "My Python code is running slowly. How do I debug it?"
+    category: technical
+    complexity: medium
+    notes: "Practical technical question, tests structure"
+
+  - id: database_choice
+    text: "When should I use SQL vs NoSQL?"
+    category: technical
+    complexity: medium
+    notes: "Comparison question, tests precision and completeness"

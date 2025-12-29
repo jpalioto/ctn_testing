@@ -1,0 +1,82 @@
+# Phase 1: Constraint Adherence Evaluation
+# Tests whether SDK constraints produce measurable behavioral changes
+name: constraint_adherence_phase1
+version: "0.1"
+
+description: |
+  Initial evaluation of constraint adherence. Tests @analytical, @terse, and
+  baseline (no constraint) across diverse prompts. Uses blind judging where
+  the judge scores trait dimensions without knowing which constraint was applied.
+
+runner:
+  type: sdk_http
+  base_url: "http://localhost:14380"
+  timeout: 60
+
+prompts:
+  source: prompts/prompts.yaml
+  # Optional: subset for faster iteration
+  # include_ids: [recursion, inflation, consciousness]
+
+models:
+  - name: claude-sonnet-4
+    provider: anthropic
+
+constraints:
+  - name: baseline
+    input_prefix: ""              # No constraint applied
+    description: "Control - no constraint modifier"
+
+  - name: analytical
+    input_prefix: "@analytical "
+    description: "Engage in explicit step-by-step reasoning"
+
+  - name: terse
+    input_prefix: "@terse "
+    description: "Be maximally concise"
+
+# Judge configuration
+judge_models:
+  - name: claude-sonnet-4
+    provider: anthropic
+    temperature: 0.0
+    max_tokens: 2048
+
+judging:
+  blind: true
+  traits_definition: definitions/traits.yaml
+
+  # Judge sees response but not which constraint was applied
+  prompt_template: |
+    You are evaluating a response on several behavioral dimensions.
+    Score each dimension from 0-100 based on the anchors provided.
+
+    Response to evaluate:
+    <response>
+    {response}
+    </response>
+
+    Score these dimensions:
+    {dimensions}
+
+    For each dimension, provide:
+    1. A score from 0-100
+    2. Brief justification (1-2 sentences)
+
+    Output as JSON:
+    {
+      "scores": {
+        "dimension_name": {"score": N, "justification": "..."},
+        ...
+      }
+    }
+
+execution:
+  # Run each prompt × constraint combination
+  strategy: full_cross
+  delay: 0.5  # seconds between requests
+
+output:
+  dir: results/
+  include_raw_responses: true
+  include_judge_responses: true

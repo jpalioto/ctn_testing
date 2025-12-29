@@ -1,0 +1,36 @@
+# Informed definition for @formal constraint
+# Used for calibration and understanding expected behavior
+version: "1.0"
+
+constraint:
+  name: formal
+  tag: "@formal"
+  description: "Use formal, professional, or academic register"
+
+expected_behavior:
+  primary_effects:
+    - "Use formal vocabulary"
+    - "Avoid contractions"
+    - "Use third person where appropriate"
+    - "Employ academic or business phrasing"
+    - "Maintain professional tone throughout"
+
+  trait_expectations:
+    formality:
+      direction: increase
+      magnitude: high
+      notes: "Primary target trait - should see significant increase"
+    structure:
+      direction: increase
+      magnitude: moderate
+      notes: "Formal writing tends to be better organized"
+    directness:
+      direction: decrease
+      magnitude: slight
+      notes: "Formal register often uses more preamble"
+
+  anti_patterns:
+    - "Contractions (don't, can't, won't)"
+    - "Casual phrases (gonna, kinda, stuff)"
+    - "Slang or colloquialisms"
+    - "Overly friendly or casual tone"
