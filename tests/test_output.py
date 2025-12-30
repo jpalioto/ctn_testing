@@ -1189,3 +1189,397 @@ class TestJudgingPersistence:
         for prompt_id, test_constraint, baseline_constraint in combos:
             path = manager.judging_dir / f"{prompt_id}_{test_constraint}_vs_{baseline_constraint}.json"
             assert path.exists(), f"Missing file: {path}"
+
+
+class TestAnalysisPersistence:
+    """Tests for saving analysis summary files."""
+
+    @pytest.fixture
+    def mock_evaluation_result(self):
+        """Create a mock EvaluationResult with comparisons."""
+        from ctn_testing.runners.evaluation import EvaluationResult, PairedComparison
+        from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+
+        def make_comparison(prompt_id, test_constraint, baseline_scores, test_scores):
+            a_scores = {k: TraitScore(k, v, []) for k, v in baseline_scores.items()}
+            b_scores = {k: TraitScore(k, v, []) for k, v in test_scores.items()}
+            return PairedComparison(
+                prompt_id=prompt_id,
+                prompt_text=f"Prompt {prompt_id}",
+                baseline_constraint="baseline",
+                test_constraint=test_constraint,
+                baseline_response="baseline response",
+                test_response="test response",
+                judging_result=JudgingResult(
+                    response_a_scores=a_scores,
+                    response_b_scores=b_scores,
+                ),
+                baseline_was_a=True,
+            )
+
+        result = EvaluationResult(
+            config_name="test_config",
+            timestamp="2025-01-01T00:00:00Z",
+            comparisons=[
+                make_comparison("p1", "analytical", {"reasoning": 50, "conciseness": 70}, {"reasoning": 75, "conciseness": 60}),
+                make_comparison("p2", "analytical", {"reasoning": 55, "conciseness": 65}, {"reasoning": 80, "conciseness": 55}),
+                make_comparison("p1", "terse", {"reasoning": 50, "conciseness": 70}, {"reasoning": 45, "conciseness": 90}),
+                make_comparison("p2", "terse", {"reasoning": 55, "conciseness": 65}, {"reasoning": 50, "conciseness": 85}),
+            ],
+        )
+        return result
+
+    @pytest.fixture
+    def mock_analyses(self, mock_evaluation_result):
+        """Create mock ConstraintAnalysis objects."""
+        from ctn_testing.statistics.constraint_analysis import ConstraintAnalysis, TraitComparison
+
+        return {
+            "analytical": ConstraintAnalysis(
+                constraint="analytical",
+                n_prompts=2,
+                trait_comparisons={
+                    "reasoning": TraitComparison(
+                        trait="reasoning",
+                        baseline_mean=52.5,
+                        test_mean=77.5,
+                        mean_diff=25.0,
+                        t_stat=5.0,
+                        p_value=0.001,
+                        effect_size=1.5,
+                        n=2,
+                        significant=True,
+                    ),
+                    "conciseness": TraitComparison(
+                        trait="conciseness",
+                        baseline_mean=67.5,
+                        test_mean=57.5,
+                        mean_diff=-10.0,
+                        t_stat=-2.5,
+                        p_value=0.04,
+                        effect_size=-0.6,
+                        n=2,
+                        significant=True,
+                    ),
+                },
+            ),
+            "terse": ConstraintAnalysis(
+                constraint="terse",
+                n_prompts=2,
+                trait_comparisons={
+                    "reasoning": TraitComparison(
+                        trait="reasoning",
+                        baseline_mean=52.5,
+                        test_mean=47.5,
+                        mean_diff=-5.0,
+                        t_stat=-1.0,
+                        p_value=0.3,
+                        effect_size=-0.3,
+                        n=2,
+                        significant=False,
+                    ),
+                    "conciseness": TraitComparison(
+                        trait="conciseness",
+                        baseline_mean=67.5,
+                        test_mean=87.5,
+                        mean_diff=20.0,
+                        t_stat=4.0,
+                        p_value=0.002,
+                        effect_size=1.2,
+                        n=2,
+                        significant=True,
+                    ),
+                },
+            ),
+        }
+
+    def test_save_analysis_creates_directory(self, temp_output_dir, mock_config, temp_config_file):
+        """analysis/ directory is created during initialization."""
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=1)
+
+        assert manager.analysis_dir.exists()
+        assert manager.analysis_dir.is_dir()
+
+    def test_save_analysis_creates_summary_json(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+        """save_analysis creates summary.json in analysis/ directory."""
+        mock_config.output = {}
+        mock_config.baseline_constraint = MagicMock()
+        mock_config.baseline_constraint.name = "baseline"
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=2)
+
+        manager.save_analysis(mock_evaluation_result, mock_analyses)
+
+        summary_path = manager.analysis_dir / "summary.json"
+        assert summary_path.exists()
+
+    def test_save_analysis_creates_comparisons_json(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+        """save_analysis creates comparisons.json in analysis/ directory."""
+        mock_config.output = {}
+        mock_config.baseline_constraint = MagicMock()
+        mock_config.baseline_constraint.name = "baseline"
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=2)
+
+        manager.save_analysis(mock_evaluation_result, mock_analyses)
+
+        comparisons_path = manager.analysis_dir / "comparisons.json"
+        assert comparisons_path.exists()
+
+    def test_summary_json_contains_required_fields(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+        """summary.json contains all required fields."""
+        mock_config.output = {}
+        mock_config.name = "test_eval"
+        mock_config.baseline_constraint = MagicMock()
+        mock_config.baseline_constraint.name = "baseline"
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=2)
+
+        manager.save_analysis(mock_evaluation_result, mock_analyses)
+
+        summary_path = manager.analysis_dir / "summary.json"
+        with open(summary_path) as f:
+            data = json.load(f)
+
+        assert "generated_at" in data
+        assert data["config_name"] == "test_eval"
+        assert data["prompts_count"] == 2  # p1 and p2
+        assert set(data["constraints_tested"]) == {"analytical", "terse"}
+        assert data["baseline_constraint"] == "baseline"
+        assert "results" in data
+        assert "analytical" in data["results"]
+        assert "terse" in data["results"]
+
+    def test_summary_json_contains_statistics(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+        """summary.json contains statistics per constraint."""
+        mock_config.output = {}
+        mock_config.name = "test_eval"
+        mock_config.baseline_constraint = MagicMock()
+        mock_config.baseline_constraint.name = "baseline"
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=2)
+
+        manager.save_analysis(mock_evaluation_result, mock_analyses)
+
+        summary_path = manager.analysis_dir / "summary.json"
+        with open(summary_path) as f:
+            data = json.load(f)
+
+        analytical = data["results"]["analytical"]
+        assert analytical["n_prompts"] == 2
+        assert "reasoning" in analytical["significant_improvements"]
+        assert "conciseness" in analytical["significant_degradations"]
+        assert "traits" in analytical
+
+        reasoning = analytical["traits"]["reasoning"]
+        assert reasoning["baseline_mean"] == 52.5
+        assert reasoning["test_mean"] == 77.5
+        assert reasoning["mean_diff"] == 25.0
+        assert reasoning["p_value"] == 0.001
+        assert reasoning["effect_size"] == 1.5
+        assert reasoning["effect_interpretation"] == "large"
+        assert reasoning["significant"] is True
+
+    def test_comparisons_json_contains_all_comparisons(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+        """comparisons.json contains all paired comparisons."""
+        mock_config.output = {}
+        mock_config.baseline_constraint = MagicMock()
+        mock_config.baseline_constraint.name = "baseline"
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=2)
+
+        manager.save_analysis(mock_evaluation_result, mock_analyses)
+
+        comparisons_path = manager.analysis_dir / "comparisons.json"
+        with open(comparisons_path) as f:
+            data = json.load(f)
+
+        assert "generated_at" in data
+        assert len(data["comparisons"]) == 4  # 2 prompts × 2 constraints
+
+    def test_comparisons_json_contains_deltas(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+        """comparisons.json contains correctly computed deltas."""
+        mock_config.output = {}
+        mock_config.baseline_constraint = MagicMock()
+        mock_config.baseline_constraint.name = "baseline"
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=2)
+
+        manager.save_analysis(mock_evaluation_result, mock_analyses)
+
+        comparisons_path = manager.analysis_dir / "comparisons.json"
+        with open(comparisons_path) as f:
+            data = json.load(f)
+
+        # Find p1 analytical comparison
+        p1_analytical = next(
+            c for c in data["comparisons"]
+            if c["prompt_id"] == "p1" and c["test_constraint"] == "analytical"
+        )
+
+        assert p1_analytical["baseline_scores"]["reasoning"] == 50
+        assert p1_analytical["test_scores"]["reasoning"] == 75
+        assert p1_analytical["deltas"]["reasoning"] == 25  # 75 - 50
+
+        assert p1_analytical["baseline_scores"]["conciseness"] == 70
+        assert p1_analytical["test_scores"]["conciseness"] == 60
+        assert p1_analytical["deltas"]["conciseness"] == -10  # 60 - 70
+
+    def test_save_analysis_raises_on_write_failure(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+        """save_analysis raises PersistenceError on write failure."""
+        mock_config.output = {}
+        mock_config.baseline_constraint = MagicMock()
+        mock_config.baseline_constraint.name = "baseline"
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=2)
+
+        with patch("ctn_testing.runners.output.tempfile.mkstemp", side_effect=OSError("Disk full")):
+            with pytest.raises(PersistenceError) as exc_info:
+                manager.save_analysis(mock_evaluation_result, mock_analyses)
+
+            assert "Cannot save analysis" in str(exc_info.value)
+
+    def test_save_analysis_works_with_empty_results(self, temp_output_dir, mock_config, temp_config_file):
+        """save_analysis works with no comparisons."""
+        from ctn_testing.runners.evaluation import EvaluationResult
+
+        mock_config.output = {}
+        mock_config.name = "test_eval"
+        mock_config.baseline_constraint = MagicMock()
+        mock_config.baseline_constraint.name = "baseline"
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=0)
+
+        empty_result = EvaluationResult(
+            config_name="test",
+            timestamp="2025-01-01T00:00:00Z",
+            comparisons=[],
+        )
+
+        manager.save_analysis(empty_result, {})
+
+        summary_path = manager.analysis_dir / "summary.json"
+        comparisons_path = manager.analysis_dir / "comparisons.json"
+
+        assert summary_path.exists()
+        assert comparisons_path.exists()
+
+        with open(summary_path) as f:
+            summary = json.load(f)
+        assert summary["prompts_count"] == 0
+        assert summary["results"] == {}
+
+        with open(comparisons_path) as f:
+            comparisons = json.load(f)
+        assert comparisons["comparisons"] == []
+
+    def test_null_output_manager_save_analysis_noop(self, mock_evaluation_result, mock_analyses):
+        """NullOutputManager.save_analysis is a no-op."""
+        manager = NullOutputManager()
+
+        # Should not raise
+        manager.save_analysis(mock_evaluation_result, mock_analyses)
+
+    def test_save_analysis_skips_error_comparisons(self, temp_output_dir, mock_config, temp_config_file):
+        """Comparisons with errors are skipped in comparisons.json."""
+        from ctn_testing.runners.evaluation import EvaluationResult, PairedComparison
+        from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+
+        mock_config.output = {}
+        mock_config.baseline_constraint = MagicMock()
+        mock_config.baseline_constraint.name = "baseline"
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=2)
+
+        # Create result with one valid and one errored comparison
+        valid_comparison = PairedComparison(
+            prompt_id="p1",
+            prompt_text="Prompt 1",
+            baseline_constraint="baseline",
+            test_constraint="analytical",
+            baseline_response="baseline",
+            test_response="test",
+            judging_result=JudgingResult(
+                response_a_scores={"trait": TraitScore("trait", 50, [])},
+                response_b_scores={"trait": TraitScore("trait", 70, [])},
+            ),
+            baseline_was_a=True,
+        )
+
+        error_comparison = PairedComparison(
+            prompt_id="p2",
+            prompt_text="Prompt 2",
+            baseline_constraint="baseline",
+            test_constraint="analytical",
+            baseline_response="baseline",
+            test_response="test",
+            judging_result=JudgingResult(),
+            baseline_was_a=True,
+            error="Judge failed",
+        )
+
+        result = EvaluationResult(
+            config_name="test",
+            timestamp="2025-01-01T00:00:00Z",
+            comparisons=[valid_comparison, error_comparison],
+        )
+
+        manager.save_analysis(result, {})
+
+        comparisons_path = manager.analysis_dir / "comparisons.json"
+        with open(comparisons_path) as f:
+            data = json.load(f)
+
+        # Only valid comparison should be included
+        assert len(data["comparisons"]) == 1
+        assert data["comparisons"][0]["prompt_id"] == "p1"

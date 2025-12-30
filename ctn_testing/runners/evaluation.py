@@ -19,6 +19,7 @@ from .constraint_runner import (
 from .output import RunOutputManager, NullOutputManager
 # Import directly from module to avoid circular import through __init__.py
 from ..judging.blind_judge import BlindJudge, JudgingResult  # noqa: E402
+from ..statistics.constraint_analysis import full_analysis  # noqa: E402
 
 
 @dataclass
@@ -270,6 +271,10 @@ class ConstraintEvaluator:
         for comp in result.comparisons:
             if comp.error:
                 errors.append(f"Judge error [{comp.prompt_id}×{comp.test_constraint}]: {comp.error}")
+
+        # Phase 3: Run statistical analysis and save results
+        analyses = full_analysis(result)
+        self._output_manager.save_analysis(result=result, analyses=analyses)
 
         # Finalize output (updates manifest with completion time and errors)
         self._output_manager.finalize(errors=errors)

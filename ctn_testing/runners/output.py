@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .evaluation import EvaluationConfig, PairedComparison
+    from .evaluation import EvaluationConfig, EvaluationResult, PairedComparison
     from .constraint_runner import RunResult
+    from ..statistics.constraint_analysis import ConstraintAnalysis
 
 
 class PersistenceError(Exception):
@@ -90,6 +91,11 @@ class RunOutputManager:
         return self.run_dir / "judging"
 
     @property
+    def analysis_dir(self) -> Path:
+        """Directory for analysis summary files."""
+        return self.run_dir / "analysis"
+
+    @property
     def manifest_path(self) -> Path:
         """Path to manifest.json."""
         return self.run_dir / "manifest.json"
@@ -112,6 +118,7 @@ class RunOutputManager:
             self.config_dir.mkdir(parents=True, exist_ok=True)
             self.responses_dir.mkdir(parents=True, exist_ok=True)
             self.judging_dir.mkdir(parents=True, exist_ok=True)
+            self.analysis_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             raise PersistenceError(
                 f"Cannot create output directory {self.run_dir}: {e}"
@@ -323,6 +330,123 @@ class RunOutputManager:
                 f"Cannot save judging result to {dest_path}: {e}"
             ) from e
 
+    def save_analysis(
+        self,
+        result: "EvaluationResult",
+        analyses: dict[str, "ConstraintAnalysis"],
+    ) -> None:
+        """Save summary.json and comparisons.json to analysis/ directory.
+
+        Args:
+            result: Evaluation result with all comparisons
+            analyses: Dict of constraint name to ConstraintAnalysis
+
+        Raises:
+            PersistenceError: If analysis files cannot be written.
+        """
+        timestamp = datetime.now().isoformat()
+
+        # Get baseline constraint name
+        baseline_constraint = self.config.baseline_constraint
+        baseline_name = baseline_constraint.name if baseline_constraint else "baseline"
+
+        # Build summary.json
+        summary_data = {
+            "generated_at": timestamp,
+            "config_name": self.config.name,
+            "prompts_count": len(set(c.prompt_id for c in result.comparisons)),
+            "constraints_tested": list(analyses.keys()),
+            "baseline_constraint": baseline_name,
+            "results": {},
+        }
+
+        for constraint, analysis in analyses.items():
+            traits_data = {}
+            for trait_name, comp in analysis.trait_comparisons.items():
+                traits_data[trait_name] = {
+                    "baseline_mean": comp.baseline_mean,
+                    "test_mean": comp.test_mean,
+                    "mean_diff": comp.mean_diff,
+                    "p_value": comp.p_value,
+                    "effect_size": comp.effect_size,
+                    "effect_interpretation": comp.effect_interpretation,
+                    "significant": comp.significant,
+                }
+
+            summary_data["results"][constraint] = {
+                "n_prompts": analysis.n_prompts,
+                "significant_improvements": analysis.improved_traits(),
+                "significant_degradations": analysis.degraded_traits(),
+                "traits": traits_data,
+            }
+
+        # Build comparisons.json
+        comparisons_data = {
+            "generated_at": timestamp,
+            "comparisons": [],
+        }
+
+        for comp in result.comparisons:
+            if comp.error or comp.judging_result.error:
+                continue
+
+            baseline_scores = {}
+            test_scores = {}
+            deltas = {}
+
+            for trait, score in comp.get_baseline_scores().items():
+                baseline_scores[trait] = score.score
+
+            for trait, score in comp.get_test_scores().items():
+                test_scores[trait] = score.score
+
+            for trait in baseline_scores:
+                if trait in test_scores:
+                    deltas[trait] = test_scores[trait] - baseline_scores[trait]
+
+            comparisons_data["comparisons"].append({
+                "prompt_id": comp.prompt_id,
+                "test_constraint": comp.test_constraint,
+                "baseline_scores": baseline_scores,
+                "test_scores": test_scores,
+                "deltas": deltas,
+            })
+
+        # Write both files atomically
+        self._write_analysis_file("summary.json", summary_data)
+        self._write_analysis_file("comparisons.json", comparisons_data)
+
+    def _write_analysis_file(self, filename: str, data: dict) -> None:
+        """Write an analysis file atomically.
+
+        Args:
+            filename: Name of the file (e.g., "summary.json")
+            data: Data to write as JSON
+
+        Raises:
+            PersistenceError: If file cannot be written.
+        """
+        dest_path = self.analysis_dir / filename
+
+        try:
+            fd, temp_path = tempfile.mkstemp(
+                dir=self.analysis_dir,
+                suffix=".tmp",
+                prefix=f".{filename}.",
+            )
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(data, f, indent=2)
+                os.replace(temp_path, dest_path)
+            except Exception:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                raise
+        except Exception as e:
+            raise PersistenceError(
+                f"Cannot save analysis to {dest_path}: {e}"
+            ) from e
+
     def _copy_configs(self) -> None:
         """Copy config files to the run directory."""
         # Copy main config
@@ -409,6 +533,14 @@ class NullOutputManager:
         comparison: "PairedComparison",
         judge_model: dict,
         timestamp: str,
+    ) -> None:
+        """No-op."""
+        pass
+
+    def save_analysis(
+        self,
+        result: "EvaluationResult",
+        analyses: dict[str, "ConstraintAnalysis"],
     ) -> None:
         """No-op."""
         pass
