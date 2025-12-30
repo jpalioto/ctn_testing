@@ -16,6 +16,7 @@ from .constraint_runner import (
     load_prompts,
     load_constraints,
 )
+from .output import RunOutputManager, NullOutputManager
 # Import directly from module to avoid circular import through __init__.py
 from ..judging.blind_judge import BlindJudge, JudgingResult  # noqa: E402
 
@@ -173,6 +174,7 @@ class ConstraintEvaluator:
             random_seed: Seed for randomization (for reproducibility)
         """
         self.config = load_config(config_path)
+        self._config_path = config_path
 
         # Set up SDK runner
         base_url = sdk_base_url or self.config.runner.get("base_url", "http://localhost:14380")
@@ -207,6 +209,25 @@ class ConstraintEvaluator:
         # Randomization
         self._rng = random.Random(random_seed)
 
+        # Set up output manager
+        self._output_manager = self._create_output_manager()
+
+    def _create_output_manager(self) -> RunOutputManager | NullOutputManager:
+        """Create output manager based on config."""
+        output_config = self.config.output
+        if not output_config or not output_config.get("dir"):
+            return NullOutputManager()
+
+        # Resolve output dir relative to config directory
+        output_dir_str = output_config.get("dir", "results/")
+        output_dir = self.config.config_dir.parent / output_dir_str
+
+        return RunOutputManager(
+            base_dir=output_dir,
+            config=self.config,
+            config_path=self._config_path,
+        )
+
     def run(
         self,
         progress_callback: Callable[[str, int, int], None] | None = None,
@@ -218,17 +239,40 @@ class ConstraintEvaluator:
 
         Returns:
             EvaluationResult with all run results and comparisons
+
+        Raises:
+            PersistenceError: If output directory cannot be created or written to.
+                No SDK calls are made if persistence fails (fail-fast behavior).
         """
+        # Initialize output (creates directories, copies configs, writes manifest)
+        # PersistenceError propagates here - no SDK calls if we can't persist
+        self._output_manager.initialize(prompts_count=len(self.prompts))
+
         result = EvaluationResult(
             config_name=self.config.name,
             timestamp=datetime.now().isoformat(),
         )
 
+        errors: list[str] = []
+
         # Phase 1: Run all prompt × constraint combinations
         self._run_phase(result, progress_callback)
 
+        # Collect run errors
+        for run_result in result.run_results:
+            if run_result.error:
+                errors.append(f"Run error [{run_result.prompt_id}×{run_result.constraint_name}]: {run_result.error}")
+
         # Phase 2: Compare baseline vs each test constraint
         self._judge_phase(result, progress_callback)
+
+        # Collect comparison errors
+        for comp in result.comparisons:
+            if comp.error:
+                errors.append(f"Judge error [{comp.prompt_id}×{comp.test_constraint}]: {comp.error}")
+
+        # Finalize output (updates manifest with completion time and errors)
+        self._output_manager.finalize(errors=errors)
 
         return result
 
@@ -237,7 +281,11 @@ class ConstraintEvaluator:
         result: EvaluationResult,
         progress_callback: Callable[[str, int, int], None] | None,
     ) -> None:
-        """Run all prompt × constraint combinations."""
+        """Run all prompt × constraint combinations.
+
+        Raises:
+            PersistenceError: If a response cannot be saved (fail-fast).
+        """
         total = len(self.prompts) * len(self.config.constraints)
         current = 0
 
@@ -245,6 +293,13 @@ class ConstraintEvaluator:
             prompt_results = self.constraint_runner.run_prompt(prompt)
             for constraint_name, run_result in prompt_results.items():
                 result.run_results.append(run_result)
+
+                # Save response to disk (fail-fast on error)
+                self._output_manager.save_response(
+                    run_result=run_result,
+                    prompt_text=prompt.text,
+                )
+
                 current += 1
                 if progress_callback:
                     progress_callback("running", current, total)
@@ -254,7 +309,11 @@ class ConstraintEvaluator:
         result: EvaluationResult,
         progress_callback: Callable[[str, int, int], None] | None,
     ) -> None:
-        """Judge baseline vs each test constraint."""
+        """Judge baseline vs each test constraint.
+
+        Raises:
+            PersistenceError: If a judging result cannot be saved (fail-fast).
+        """
         baseline = self.config.baseline_constraint
         if baseline is None:
             return
@@ -262,6 +321,13 @@ class ConstraintEvaluator:
         test_constraints = self.config.test_constraints
         total = len(self.prompts) * len(test_constraints)
         current = 0
+
+        # Get judge model config for saving
+        judge_config = self.config.judge_models[0] if self.config.judge_models else {}
+        judge_model = {
+            "provider": judge_config.get("provider", "anthropic"),
+            "name": judge_config.get("name", ""),
+        }
 
         # Group run results by prompt
         results_by_prompt: dict[str, dict[str, RunResult]] = {}
@@ -298,6 +364,13 @@ class ConstraintEvaluator:
                     test_constraint=test_constraint.name,
                 )
                 result.comparisons.append(comparison)
+
+                # Save judging result to disk (fail-fast on error)
+                self._output_manager.save_judging(
+                    comparison=comparison,
+                    judge_model=judge_model,
+                    timestamp=datetime.now().isoformat(),
+                )
 
                 current += 1
                 if progress_callback:

@@ -112,10 +112,7 @@ def _make_google_client(config: ModelConfig, retry_decorator) -> CompleteFunctio
     
     @retry_decorator
     def complete(prompt: "RenderedPrompt") -> CompletionResult:
-        # Build content parts
-        parts: list = []
-        
-        # Add document file if present
+        parts: list = []        
         if prompt.has_file and prompt.document:
             doc = prompt.document
             if not doc.media_type:
@@ -125,7 +122,6 @@ def _make_google_client(config: ModelConfig, retry_decorator) -> CompleteFunctio
                 mime_type=doc.media_type,
             ))
         
-        # Add text prompt
         parts.append(types.Part.from_text(text=prompt.user))
         
         response = client.models.generate_content(
