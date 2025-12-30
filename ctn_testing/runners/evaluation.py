@@ -17,7 +17,7 @@ from .constraint_runner import (
     load_prompts,
     load_constraints,
 )
-from .output import RunOutputManager, NullOutputManager, RejudgeOutputManager
+from .output import RunOutputManager, NullOutputManager
 # Import directly from module to avoid circular import through __init__.py
 from ..judging.blind_judge import BlindJudge, JudgingResult, TraitScore  # noqa: E402
 from ..statistics.constraint_analysis import full_analysis  # noqa: E402
@@ -100,6 +100,7 @@ class EvaluationResult:
     timestamp: str
     run_results: list[RunResult] = field(default_factory=list)
     comparisons: list[PairedComparison] = field(default_factory=list)
+    run_dir: Path | None = None  # Output directory for this run
 
     def get_comparisons_for(self, constraint: str) -> list[PairedComparison]:
         """Get all comparisons for a specific test constraint."""
@@ -155,11 +156,17 @@ class EvaluationResult:
         return summary
 
     @classmethod
-    def load(cls, run_dir: Path) -> "EvaluationResult":
+    def load(
+        cls,
+        run_dir: Path,
+        load_responses_only: bool = False,
+    ) -> "EvaluationResult":
         """Load an EvaluationResult from saved files.
 
         Args:
             run_dir: Path to run directory (e.g., results/2025-01-01T12-00-00/)
+            load_responses_only: If True, skip loading judging files (more efficient
+                for rejudge operations that only need responses)
 
         Returns:
             EvaluationResult reconstructed from saved files
@@ -208,28 +215,29 @@ class EvaluationResult:
                 )
                 result.run_results.append(run_result)
 
-        # Load comparisons from judging/
-        judging_dir = run_dir / "judging"
-        if judging_dir.exists():
-            for judging_file in sorted(judging_dir.glob("*.json")):
-                with open(judging_file) as f:
-                    data = json.load(f)
+        # Load comparisons from judging/ (skip if load_responses_only)
+        if not load_responses_only:
+            judging_dir = run_dir / "judging"
+            if judging_dir.exists():
+                for judging_file in sorted(judging_dir.glob("*.json")):
+                    with open(judging_file) as f:
+                        data = json.load(f)
 
-                # Reconstruct JudgingResult with TraitScore objects
-                judging_result = cls._parse_judging_result(data)
+                    # Reconstruct JudgingResult with TraitScore objects
+                    judging_result = cls._parse_judging_result(data)
 
-                comparison = PairedComparison(
-                    prompt_id=data.get("prompt_id", ""),
-                    prompt_text=data.get("prompt_text", ""),
-                    baseline_constraint=data.get("baseline_constraint", ""),
-                    test_constraint=data.get("test_constraint", ""),
-                    baseline_response=data.get("baseline_response") or "",
-                    test_response=data.get("test_response") or "",
-                    judging_result=judging_result,
-                    baseline_was_a=data.get("baseline_was_a", True),
-                    error=data.get("error"),
-                )
-                result.comparisons.append(comparison)
+                    comparison = PairedComparison(
+                        prompt_id=data.get("prompt_id", ""),
+                        prompt_text=data.get("prompt_text", ""),
+                        baseline_constraint=data.get("baseline_constraint", ""),
+                        test_constraint=data.get("test_constraint", ""),
+                        baseline_response=data.get("baseline_response") or "",
+                        test_response=data.get("test_response") or "",
+                        judging_result=judging_result,
+                        baseline_was_a=data.get("baseline_was_a", True),
+                        error=data.get("error"),
+                    )
+                    result.comparisons.append(comparison)
 
         return result
 
@@ -550,20 +558,18 @@ class ConstraintEvaluator:
         responses_path: Path,
         judge_model: str | None = None,
         judge_provider: str | None = None,
-        output_suffix: str = "-rejudge",
         progress_callback: Callable[[str, int, int], None] | None = None,
     ) -> EvaluationResult:
         """Re-run judging on existing responses with a different model.
 
         Loads responses from an existing run directory, runs blind judging
         with the specified (or config default) judge model, and saves results
-        to suffixed directories (judging{suffix}/, analysis{suffix}/).
+        to a new timestamped folder in the same parent directory.
 
         Args:
             responses_path: Path to existing run folder containing responses/
             judge_model: Override judge model name (e.g., "haiku")
             judge_provider: Override judge provider (e.g., "anthropic")
-            output_suffix: Suffix for output directories (e.g., "-haiku")
             progress_callback: Called with (stage, current, total) during run
 
         Returns:
@@ -575,8 +581,8 @@ class ConstraintEvaluator:
         """
         responses_path = Path(responses_path)
 
-        # Load existing responses
-        loaded = EvaluationResult.load(responses_path)
+        # Load existing responses only (skip judging files for efficiency)
+        loaded = EvaluationResult.load(responses_path, load_responses_only=True)
         if not loaded.run_results:
             raise FileNotFoundError(f"No responses found in {responses_path}")
 
@@ -598,18 +604,20 @@ class ConstraintEvaluator:
             judge_model=effective_model,
         )
 
-        # Create rejudge output manager
-        output_manager = RejudgeOutputManager(
-            run_dir=responses_path,
+        # Create output manager for new timestamped folder in same parent directory
+        # responses_path.parent is the base results directory (e.g., results/)
+        output_manager = RunOutputManager(
+            base_dir=responses_path.parent,
             config=self.config,
-            suffix=output_suffix,
+            config_path=self._config_path,
+            rejudge_source=responses_path,
             judge_model_override=judge_model_override,
         )
 
         # Get unique prompts from loaded responses
         prompt_ids = set(r.prompt_id for r in loaded.run_results)
 
-        # Initialize output (creates suffixed directories, writes manifest)
+        # Initialize output (creates new timestamped dir, skips responses/, writes manifest)
         output_manager.initialize(prompts_count=len(prompt_ids))
 
         # Create result for this rejudge run
@@ -642,13 +650,16 @@ class ConstraintEvaluator:
         # Finalize output
         output_manager.finalize(errors=errors)
 
+        # Set run_dir on result for test access
+        result.run_dir = output_manager.run_dir
+
         return result
 
     def _rejudge_phase(
         self,
         result: EvaluationResult,
         judge: BlindJudge,
-        output_manager: RejudgeOutputManager,
+        output_manager: RunOutputManager,
         judge_model: dict,
         progress_callback: Callable[[str, int, int], None] | None,
     ) -> None:

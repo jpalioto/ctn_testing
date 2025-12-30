@@ -127,11 +127,12 @@ class TestRunOutputManager:
 
         manager.initialize(prompts_count=5)
 
-        # Check run_id format (YYYY-MM-DDTHH-MM-SS)
-        assert len(manager.run_id) == 19
+        # Check run_id format (YYYY-MM-DDTHH-MM-SS-ffffff)
+        assert len(manager.run_id) == 26
         assert manager.run_id[4] == "-"
         assert manager.run_id[7] == "-"
         assert manager.run_id[10] == "T"
+        assert manager.run_id[19] == "-"  # Microseconds separator
 
         # Check directory was created
         assert manager.run_dir.exists()

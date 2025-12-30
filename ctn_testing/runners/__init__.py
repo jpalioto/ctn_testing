@@ -13,7 +13,7 @@ from .constraint_runner import (
     load_prompts,
     load_constraints,
 )
-from .output import PersistenceError, RejudgeOutputManager, RejudgeManifest
+from .output import PersistenceError
 
 # Note: evaluation module imported lazily to avoid circular import with judging
 # Use: from ctn_testing.runners.evaluation import ConstraintEvaluator
@@ -49,8 +49,6 @@ __all__ = [
     "load_constraints",
     # Output management
     "PersistenceError",
-    "RejudgeOutputManager",
-    "RejudgeManifest",
     # Note: Evaluation module classes available via:
     # from ctn_testing.runners.evaluation import ConstraintEvaluator, ...
 ]
