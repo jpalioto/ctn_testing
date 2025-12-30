@@ -17,7 +17,7 @@ from .constraint_runner import (
     load_prompts,
     load_constraints,
 )
-from .output import RunOutputManager, NullOutputManager
+from .output import RunOutputManager, NullOutputManager, RejudgeOutputManager
 # Import directly from module to avoid circular import through __init__.py
 from ..judging.blind_judge import BlindJudge, JudgingResult, TraitScore  # noqa: E402
 from ..statistics.constraint_analysis import full_analysis  # noqa: E402
@@ -536,6 +536,225 @@ class ConstraintEvaluator:
         return PairedComparison(
             prompt_id=prompt.id,
             prompt_text=prompt.text,
+            baseline_constraint=baseline_constraint,
+            test_constraint=test_constraint,
+            baseline_response=baseline_result.output,
+            test_response=test_result.output,
+            judging_result=judging_result,
+            baseline_was_a=baseline_was_a,
+            error=error,
+        )
+
+    def rejudge(
+        self,
+        responses_path: Path,
+        judge_model: str | None = None,
+        judge_provider: str | None = None,
+        output_suffix: str = "-rejudge",
+        progress_callback: Callable[[str, int, int], None] | None = None,
+    ) -> EvaluationResult:
+        """Re-run judging on existing responses with a different model.
+
+        Loads responses from an existing run directory, runs blind judging
+        with the specified (or config default) judge model, and saves results
+        to suffixed directories (judging{suffix}/, analysis{suffix}/).
+
+        Args:
+            responses_path: Path to existing run folder containing responses/
+            judge_model: Override judge model name (e.g., "haiku")
+            judge_provider: Override judge provider (e.g., "anthropic")
+            output_suffix: Suffix for output directories (e.g., "-haiku")
+            progress_callback: Called with (stage, current, total) during run
+
+        Returns:
+            EvaluationResult with comparisons from new judging
+
+        Raises:
+            FileNotFoundError: If responses_path doesn't exist or has no responses
+            PersistenceError: If output directories cannot be created
+        """
+        responses_path = Path(responses_path)
+
+        # Load existing responses
+        loaded = EvaluationResult.load(responses_path)
+        if not loaded.run_results:
+            raise FileNotFoundError(f"No responses found in {responses_path}")
+
+        # Determine judge model to use
+        judge_config = self.config.judge_models[0] if self.config.judge_models else {}
+        effective_provider = judge_provider or judge_config.get("provider", "anthropic")
+        effective_model = judge_model or judge_config.get("name")
+
+        judge_model_override = {
+            "provider": effective_provider,
+            "name": effective_model or "",
+        }
+
+        # Create a new BlindJudge with the overridden model
+        rejudge_judge = BlindJudge(
+            traits_path=self.config.traits_path,
+            sdk_runner=self.sdk_runner,
+            judge_provider=effective_provider,
+            judge_model=effective_model,
+        )
+
+        # Create rejudge output manager
+        output_manager = RejudgeOutputManager(
+            run_dir=responses_path,
+            config=self.config,
+            suffix=output_suffix,
+            judge_model_override=judge_model_override,
+        )
+
+        # Get unique prompts from loaded responses
+        prompt_ids = set(r.prompt_id for r in loaded.run_results)
+
+        # Initialize output (creates suffixed directories, writes manifest)
+        output_manager.initialize(prompts_count=len(prompt_ids))
+
+        # Create result for this rejudge run
+        result = EvaluationResult(
+            config_name=self.config.name,
+            timestamp=datetime.now().isoformat(),
+            run_results=loaded.run_results,  # Reuse loaded responses
+        )
+
+        errors: list[str] = []
+
+        # Run judging phase with the new judge
+        self._rejudge_phase(
+            result=result,
+            judge=rejudge_judge,
+            output_manager=output_manager,
+            judge_model=judge_model_override,
+            progress_callback=progress_callback,
+        )
+
+        # Collect comparison errors
+        for comp in result.comparisons:
+            if comp.error:
+                errors.append(f"Judge error [{comp.prompt_id}×{comp.test_constraint}]: {comp.error}")
+
+        # Run statistical analysis and save results
+        analyses = full_analysis(result)
+        output_manager.save_analysis(result=result, analyses=analyses)
+
+        # Finalize output
+        output_manager.finalize(errors=errors)
+
+        return result
+
+    def _rejudge_phase(
+        self,
+        result: EvaluationResult,
+        judge: BlindJudge,
+        output_manager: RejudgeOutputManager,
+        judge_model: dict,
+        progress_callback: Callable[[str, int, int], None] | None,
+    ) -> None:
+        """Run judging phase for rejudge operation.
+
+        Similar to _judge_phase but uses provided judge and output_manager.
+        """
+        baseline = self.config.baseline_constraint
+        if baseline is None:
+            return
+
+        test_constraints = self.config.test_constraints
+
+        # Group run results by prompt
+        results_by_prompt: dict[str, dict[str, RunResult]] = {}
+        for run_result in result.run_results:
+            if run_result.prompt_id not in results_by_prompt:
+                results_by_prompt[run_result.prompt_id] = {}
+            results_by_prompt[run_result.prompt_id][run_result.constraint_name] = run_result
+
+        # Calculate total for progress
+        prompt_ids = list(results_by_prompt.keys())
+        total = len(prompt_ids) * len(test_constraints)
+        current = 0
+
+        # Compare each prompt
+        for prompt_id in prompt_ids:
+            prompt_results = results_by_prompt[prompt_id]
+            baseline_result = prompt_results.get(baseline.name)
+
+            if baseline_result is None or baseline_result.error:
+                # Skip if baseline failed
+                current += len(test_constraints)
+                continue
+
+            for test_constraint in test_constraints:
+                test_result = prompt_results.get(test_constraint.name)
+
+                if test_result is None or test_result.error:
+                    # Skip if test failed
+                    current += 1
+                    if progress_callback:
+                        progress_callback("rejudging", current, total)
+                    continue
+
+                # Run comparison with the provided judge
+                comparison = self._compare_pair_with_judge(
+                    judge=judge,
+                    prompt_id=prompt_id,
+                    prompt_text=baseline_result.input_sent.replace(
+                        baseline.input_prefix, ""
+                    ),  # Reconstruct prompt text
+                    baseline_result=baseline_result,
+                    test_result=test_result,
+                    baseline_constraint=baseline.name,
+                    test_constraint=test_constraint.name,
+                )
+                result.comparisons.append(comparison)
+
+                # Save judging result
+                output_manager.save_judging(
+                    comparison=comparison,
+                    judge_model=judge_model,
+                    timestamp=datetime.now().isoformat(),
+                )
+
+                current += 1
+                if progress_callback:
+                    progress_callback("rejudging", current, total)
+
+    def _compare_pair_with_judge(
+        self,
+        judge: BlindJudge,
+        prompt_id: str,
+        prompt_text: str,
+        baseline_result: RunResult,
+        test_result: RunResult,
+        baseline_constraint: str,
+        test_constraint: str,
+    ) -> PairedComparison:
+        """Run blind comparison using a specific judge instance."""
+        # Randomize order
+        baseline_was_a = self._rng.random() < 0.5
+
+        if baseline_was_a:
+            response_a = baseline_result.output
+            response_b = test_result.output
+        else:
+            response_a = test_result.output
+            response_b = baseline_result.output
+
+        # Call judge
+        try:
+            judging_result = judge.judge(
+                response_a=response_a,
+                response_b=response_b,
+                prompt_text=prompt_text,
+            )
+            error = judging_result.error
+        except Exception as e:
+            judging_result = JudgingResult(raw_response="", error=str(e))
+            error = str(e)
+
+        return PairedComparison(
+            prompt_id=prompt_id,
+            prompt_text=prompt_text,
             baseline_constraint=baseline_constraint,
             test_constraint=test_constraint,
             baseline_response=baseline_result.output,

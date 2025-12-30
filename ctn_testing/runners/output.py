@@ -501,6 +501,348 @@ class RunOutputManager:
             json.dump(self._manifest.to_dict(), f, indent=2)
 
 
+@dataclass
+class RejudgeManifest:
+    """Manifest for rejudge run metadata."""
+    rejudge_id: str                    # Timestamp-based ID for this rejudge
+    original_run_id: str               # ID of the original run
+    started_at: str                    # ISO timestamp
+    completed_at: str | None = None    # Filled at end
+    duration_seconds: float | None = None  # Filled at end
+    suffix: str = ""                   # Output suffix (e.g., "-haiku")
+    judge_model_override: dict = field(default_factory=dict)  # {"provider": ..., "name": ...}
+    prompts_count: int = 0
+    total_judge_calls: int = 0
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "RejudgeManifest":
+        """Create from dictionary."""
+        return cls(**data)
+
+
+class RejudgeOutputManager:
+    """Manages output for rejudge operations on existing runs.
+
+    Creates suffixed directories within an existing run folder:
+    - judging{suffix}/ for new judging results
+    - analysis{suffix}/ for new analysis
+    - manifest{suffix}.json for rejudge metadata
+    """
+
+    def __init__(
+        self,
+        run_dir: Path,
+        config: "EvaluationConfig",
+        suffix: str = "-rejudge",
+        judge_model_override: dict | None = None,
+    ):
+        """Initialize the rejudge output manager.
+
+        Args:
+            run_dir: Existing run directory (e.g., results/2025-01-15T10-30-00/)
+            config: Evaluation config
+            suffix: Suffix for output directories (e.g., "-haiku")
+            judge_model_override: Override judge model {"provider": ..., "name": ...}
+        """
+        self.run_dir = Path(run_dir)
+        self.config = config
+        self.suffix = suffix
+        self.judge_model_override = judge_model_override or {}
+        self.rejudge_id = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+        self._start_time: datetime | None = None
+        self._manifest: RejudgeManifest | None = None
+
+        # Extract original run_id from directory name
+        self.original_run_id = self.run_dir.name
+
+    @property
+    def judging_dir(self) -> Path:
+        """Directory for rejudge judging results."""
+        return self.run_dir / f"judging{self.suffix}"
+
+    @property
+    def analysis_dir(self) -> Path:
+        """Directory for rejudge analysis."""
+        return self.run_dir / f"analysis{self.suffix}"
+
+    @property
+    def manifest_path(self) -> Path:
+        """Path to rejudge manifest."""
+        return self.run_dir / f"manifest{self.suffix}.json"
+
+    def initialize(self, prompts_count: int) -> None:
+        """Create directories and write initial manifest.
+
+        Args:
+            prompts_count: Number of prompts that will be judged
+
+        Raises:
+            PersistenceError: If directories cannot be created or manifest
+                cannot be written.
+        """
+        self._start_time = datetime.now()
+
+        # Create directories
+        try:
+            self.judging_dir.mkdir(parents=True, exist_ok=True)
+            self.analysis_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise PersistenceError(
+                f"Cannot create rejudge directories in {self.run_dir}: {e}"
+            ) from e
+
+        # Validate we can write
+        self._validate_writable()
+
+        # Create initial manifest
+        self._manifest = self._create_manifest(prompts_count)
+        try:
+            self._write_manifest()
+        except OSError as e:
+            raise PersistenceError(
+                f"Cannot write manifest to {self.manifest_path}: {e}"
+            ) from e
+
+    def _validate_writable(self) -> None:
+        """Verify we can write to the judging directory."""
+        test_file = self.judging_dir / ".write_test"
+        try:
+            test_file.write_text("test")
+            test_file.unlink()
+        except Exception as e:
+            raise PersistenceError(
+                f"Cannot write to {self.judging_dir}: {e}"
+            ) from e
+
+    def finalize(self, errors: list[str] | None = None) -> None:
+        """Update manifest with completion time and errors."""
+        if self._manifest is None:
+            return
+
+        end_time = datetime.now()
+        self._manifest.completed_at = end_time.isoformat()
+
+        if self._start_time:
+            duration = (end_time - self._start_time).total_seconds()
+            self._manifest.duration_seconds = duration
+
+        if errors:
+            self._manifest.errors = errors
+
+        self._write_manifest()
+
+    def save_judging(
+        self,
+        comparison: "PairedComparison",
+        judge_model: dict,
+        timestamp: str,
+    ) -> None:
+        """Save individual judging result to judging{suffix}/ directory.
+
+        Args:
+            comparison: Paired comparison result
+            judge_model: Judge model config {"provider": ..., "name": ...}
+            timestamp: Timestamp of the judging call
+
+        Raises:
+            PersistenceError: If judging result cannot be written.
+        """
+        filename = f"{comparison.prompt_id}_{comparison.test_constraint}_vs_{comparison.baseline_constraint}.json"
+        dest_path = self.judging_dir / filename
+
+        # Check config options
+        include_raw_responses = self.config.output.get("include_raw_responses", True)
+        include_judge_responses = self.config.output.get("include_judge_responses", True)
+
+        # Build scores dict, converting TraitScore to serializable format
+        baseline_scores = {}
+        test_scores = {}
+
+        for trait, trait_score in comparison.get_baseline_scores().items():
+            baseline_scores[trait] = {
+                "score": trait_score.score,
+                "reasons": trait_score.reasons,
+            }
+
+        for trait, trait_score in comparison.get_test_scores().items():
+            test_scores[trait] = {
+                "score": trait_score.score,
+                "reasons": trait_score.reasons,
+            }
+
+        # Build judging data
+        judging_data = {
+            "prompt_id": comparison.prompt_id,
+            "prompt_text": comparison.prompt_text,
+            "baseline_constraint": comparison.baseline_constraint,
+            "test_constraint": comparison.test_constraint,
+            "baseline_was_a": comparison.baseline_was_a,
+            "baseline_response": comparison.baseline_response if include_raw_responses else None,
+            "test_response": comparison.test_response if include_raw_responses else None,
+            "scores": {
+                "baseline": baseline_scores,
+                "test": test_scores,
+            },
+            "judge_model": judge_model,
+            "judge_raw_response": comparison.judging_result.raw_response if include_judge_responses else None,
+            "timestamp": timestamp,
+        }
+
+        if comparison.error:
+            judging_data["error"] = comparison.error
+
+        # Write atomically
+        try:
+            fd, temp_path = tempfile.mkstemp(
+                dir=self.judging_dir,
+                suffix=".tmp",
+                prefix=f".{filename}.",
+            )
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(judging_data, f, indent=2)
+                os.replace(temp_path, dest_path)
+            except Exception:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                raise
+        except Exception as e:
+            raise PersistenceError(
+                f"Cannot save judging result to {dest_path}: {e}"
+            ) from e
+
+    def save_analysis(
+        self,
+        result: "EvaluationResult",
+        analyses: dict[str, "ConstraintAnalysis"],
+    ) -> None:
+        """Save summary.json and comparisons.json to analysis{suffix}/ directory."""
+        timestamp = datetime.now().isoformat()
+
+        # Get baseline constraint name
+        baseline_constraint = self.config.baseline_constraint
+        baseline_name = baseline_constraint.name if baseline_constraint else "baseline"
+
+        # Build summary.json
+        summary_data = {
+            "generated_at": timestamp,
+            "config_name": self.config.name,
+            "rejudge_suffix": self.suffix,
+            "judge_model_override": self.judge_model_override,
+            "prompts_count": len(set(c.prompt_id for c in result.comparisons)),
+            "constraints_tested": list(analyses.keys()),
+            "baseline_constraint": baseline_name,
+            "results": {},
+        }
+
+        for constraint, analysis in analyses.items():
+            traits_data = {}
+            for trait_name, comp in analysis.trait_comparisons.items():
+                traits_data[trait_name] = {
+                    "baseline_mean": comp.baseline_mean,
+                    "test_mean": comp.test_mean,
+                    "mean_diff": comp.mean_diff,
+                    "p_value": comp.p_value,
+                    "effect_size": comp.effect_size,
+                    "effect_interpretation": comp.effect_interpretation,
+                    "significant": comp.significant,
+                }
+
+            summary_data["results"][constraint] = {
+                "n_prompts": analysis.n_prompts,
+                "significant_improvements": analysis.improved_traits(),
+                "significant_degradations": analysis.degraded_traits(),
+                "traits": traits_data,
+            }
+
+        # Build comparisons.json
+        comparisons_data = {
+            "generated_at": timestamp,
+            "comparisons": [],
+        }
+
+        for comp in result.comparisons:
+            if comp.error or comp.judging_result.error:
+                continue
+
+            baseline_scores = {}
+            test_scores = {}
+            deltas = {}
+
+            for trait, score in comp.get_baseline_scores().items():
+                baseline_scores[trait] = score.score
+
+            for trait, score in comp.get_test_scores().items():
+                test_scores[trait] = score.score
+
+            for trait in baseline_scores:
+                if trait in test_scores:
+                    deltas[trait] = test_scores[trait] - baseline_scores[trait]
+
+            comparisons_data["comparisons"].append({
+                "prompt_id": comp.prompt_id,
+                "test_constraint": comp.test_constraint,
+                "baseline_scores": baseline_scores,
+                "test_scores": test_scores,
+                "deltas": deltas,
+            })
+
+        # Write both files atomically
+        self._write_analysis_file("summary.json", summary_data)
+        self._write_analysis_file("comparisons.json", comparisons_data)
+
+    def _write_analysis_file(self, filename: str, data: dict) -> None:
+        """Write an analysis file atomically."""
+        dest_path = self.analysis_dir / filename
+
+        try:
+            fd, temp_path = tempfile.mkstemp(
+                dir=self.analysis_dir,
+                suffix=".tmp",
+                prefix=f".{filename}.",
+            )
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(data, f, indent=2)
+                os.replace(temp_path, dest_path)
+            except Exception:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                raise
+        except Exception as e:
+            raise PersistenceError(
+                f"Cannot save analysis to {dest_path}: {e}"
+            ) from e
+
+    def _create_manifest(self, prompts_count: int) -> RejudgeManifest:
+        """Create the initial rejudge manifest."""
+        n_test_constraints = len(self.config.test_constraints)
+        total_judge_calls = prompts_count * n_test_constraints
+
+        return RejudgeManifest(
+            rejudge_id=self.rejudge_id,
+            original_run_id=self.original_run_id,
+            started_at=self._start_time.isoformat() if self._start_time else "",
+            suffix=self.suffix,
+            judge_model_override=self.judge_model_override,
+            prompts_count=prompts_count,
+            total_judge_calls=total_judge_calls,
+        )
+
+    def _write_manifest(self) -> None:
+        """Write manifest to disk."""
+        if self._manifest is None:
+            return
+
+        with open(self.manifest_path, "w") as f:
+            json.dump(self._manifest.to_dict(), f, indent=2)
+
+
 class NullOutputManager:
     """No-op output manager when persistence is disabled."""
 
