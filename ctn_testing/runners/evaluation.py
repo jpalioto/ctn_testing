@@ -1,4 +1,5 @@
 """Evaluation orchestrator for constraint adherence testing."""
+import json
 import random
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -18,7 +19,7 @@ from .constraint_runner import (
 )
 from .output import RunOutputManager, NullOutputManager
 # Import directly from module to avoid circular import through __init__.py
-from ..judging.blind_judge import BlindJudge, JudgingResult  # noqa: E402
+from ..judging.blind_judge import BlindJudge, JudgingResult, TraitScore  # noqa: E402
 from ..statistics.constraint_analysis import full_analysis  # noqa: E402
 
 
@@ -152,6 +153,123 @@ class EvaluationResult:
             }
 
         return summary
+
+    @classmethod
+    def load(cls, run_dir: Path) -> "EvaluationResult":
+        """Load an EvaluationResult from saved files.
+
+        Args:
+            run_dir: Path to run directory (e.g., results/2025-01-01T12-00-00/)
+
+        Returns:
+            EvaluationResult reconstructed from saved files
+
+        Raises:
+            FileNotFoundError: If run_dir or required files don't exist
+            ValueError: If file format is invalid
+        """
+        run_dir = Path(run_dir)
+        if not run_dir.exists():
+            raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+        # Read manifest for metadata
+        manifest_path = run_dir / "manifest.json"
+        if not manifest_path.exists():
+            raise FileNotFoundError(f"Manifest not found: {manifest_path}")
+
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        config_name = manifest.get("config_file", "unknown").replace(".yaml", "")
+        started_at = manifest.get("started_at", "")
+
+        result = cls(
+            config_name=config_name,
+            timestamp=started_at,
+        )
+
+        # Load run results from responses/
+        responses_dir = run_dir / "responses"
+        if responses_dir.exists():
+            for response_file in sorted(responses_dir.glob("*.json")):
+                with open(response_file) as f:
+                    data = json.load(f)
+
+                run_result = RunResult(
+                    prompt_id=data.get("prompt_id", ""),
+                    constraint_name=data.get("constraint_name", ""),
+                    input_sent=data.get("input_sent", ""),
+                    output=data.get("output") or "",
+                    provider=data.get("provider", ""),
+                    model=data.get("model", ""),
+                    tokens=data.get("tokens", {}),
+                    timestamp=data.get("timestamp", ""),
+                    error=data.get("error"),
+                )
+                result.run_results.append(run_result)
+
+        # Load comparisons from judging/
+        judging_dir = run_dir / "judging"
+        if judging_dir.exists():
+            for judging_file in sorted(judging_dir.glob("*.json")):
+                with open(judging_file) as f:
+                    data = json.load(f)
+
+                # Reconstruct JudgingResult with TraitScore objects
+                judging_result = cls._parse_judging_result(data)
+
+                comparison = PairedComparison(
+                    prompt_id=data.get("prompt_id", ""),
+                    prompt_text=data.get("prompt_text", ""),
+                    baseline_constraint=data.get("baseline_constraint", ""),
+                    test_constraint=data.get("test_constraint", ""),
+                    baseline_response=data.get("baseline_response") or "",
+                    test_response=data.get("test_response") or "",
+                    judging_result=judging_result,
+                    baseline_was_a=data.get("baseline_was_a", True),
+                    error=data.get("error"),
+                )
+                result.comparisons.append(comparison)
+
+        return result
+
+    @classmethod
+    def _parse_judging_result(cls, data: dict) -> JudgingResult:
+        """Parse JudgingResult from saved judging data."""
+        scores = data.get("scores", {})
+        baseline_scores_data = scores.get("baseline", {})
+        test_scores_data = scores.get("test", {})
+        baseline_was_a = data.get("baseline_was_a", True)
+
+        # Determine which is response_a and response_b based on baseline_was_a
+        if baseline_was_a:
+            response_a_data = baseline_scores_data
+            response_b_data = test_scores_data
+        else:
+            response_a_data = test_scores_data
+            response_b_data = baseline_scores_data
+
+        response_a_scores = cls._parse_trait_scores(response_a_data)
+        response_b_scores = cls._parse_trait_scores(response_b_data)
+
+        return JudgingResult(
+            response_a_scores=response_a_scores,
+            response_b_scores=response_b_scores,
+            raw_response=data.get("judge_raw_response") or "",
+            error=data.get("error"),
+        )
+
+    @classmethod
+    def _parse_trait_scores(cls, scores_data: dict) -> dict[str, TraitScore]:
+        """Parse TraitScore objects from saved scores data."""
+        result = {}
+        for trait_name, trait_data in scores_data.items():
+            result[trait_name] = TraitScore(
+                dimension=trait_name,
+                score=trait_data.get("score", 0),
+                reasons=trait_data.get("reasons", []),
+            )
+        return result
 
 
 class ConstraintEvaluator:
