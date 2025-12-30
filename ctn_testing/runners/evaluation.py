@@ -23,6 +23,47 @@ from ..judging.blind_judge import BlindJudge, JudgingResult, TraitScore  # noqa:
 from ..statistics.constraint_analysis import full_analysis  # noqa: E402
 
 
+# ANSI color codes for terminal output
+GREEN = "\033[92m"
+RED = "\033[91m"
+RESET = "\033[0m"
+
+
+def format_status(success: bool) -> str:
+    """Format status indicator with color."""
+    if success:
+        return f"{GREEN}[ok]{RESET}"
+    else:
+        return f"{RED}[error]{RESET}"
+
+
+# Type alias for progress callback
+# New signature: (stage, current, total, success, error_msg)
+# Old signature: (stage, current, total) - still supported for backward compatibility
+ProgressCallback = Callable[[str, int, int, bool, str | None], None]
+
+
+def _call_progress(
+    callback: Callable | None,
+    stage: str,
+    current: int,
+    total: int,
+    success: bool = True,
+    error_msg: str | None = None,
+) -> None:
+    """Call progress callback with backward compatibility.
+
+    Tries new signature first, falls back to old 3-arg signature.
+    """
+    if callback is None:
+        return
+    try:
+        callback(stage, current, total, success, error_msg)
+    except TypeError:
+        # Backward compatibility: old callback signature (stage, current, total)
+        callback(stage, current, total)
+
+
 @dataclass
 class EvaluationConfig:
     """Configuration for a constraint adherence evaluation."""
@@ -410,7 +451,7 @@ class ConstraintEvaluator:
     def _run_phase(
         self,
         result: EvaluationResult,
-        progress_callback: Callable[[str, int, int], None] | None,
+        progress_callback: Callable | None,
     ) -> None:
         """Run all prompt × constraint combinations.
 
@@ -432,13 +473,20 @@ class ConstraintEvaluator:
                 )
 
                 current += 1
-                if progress_callback:
-                    progress_callback("running", current, total)
+                success = run_result.error is None
+                _call_progress(
+                    progress_callback,
+                    "running",
+                    current,
+                    total,
+                    success=success,
+                    error_msg=run_result.error,
+                )
 
     def _judge_phase(
         self,
         result: EvaluationResult,
-        progress_callback: Callable[[str, int, int], None] | None,
+        progress_callback: Callable | None,
     ) -> None:
         """Judge baseline vs each test constraint.
 
@@ -483,8 +531,15 @@ class ConstraintEvaluator:
                 if test_result is None or test_result.error:
                     # Skip if test failed
                     current += 1
-                    if progress_callback:
-                        progress_callback("judging", current, total)
+                    error_msg = test_result.error if test_result else "missing result"
+                    _call_progress(
+                        progress_callback,
+                        "judging",
+                        current,
+                        total,
+                        success=False,
+                        error_msg=error_msg,
+                    )
                     continue
 
                 comparison = self._compare_pair(
@@ -504,8 +559,15 @@ class ConstraintEvaluator:
                 )
 
                 current += 1
-                if progress_callback:
-                    progress_callback("judging", current, total)
+                success = comparison.error is None
+                _call_progress(
+                    progress_callback,
+                    "judging",
+                    current,
+                    total,
+                    success=success,
+                    error_msg=comparison.error,
+                )
 
     def _compare_pair(
         self,
@@ -661,7 +723,7 @@ class ConstraintEvaluator:
         judge: BlindJudge,
         output_manager: RunOutputManager,
         judge_model: dict,
-        progress_callback: Callable[[str, int, int], None] | None,
+        progress_callback: Callable | None,
     ) -> None:
         """Run judging phase for rejudge operation.
 
@@ -701,8 +763,15 @@ class ConstraintEvaluator:
                 if test_result is None or test_result.error:
                     # Skip if test failed
                     current += 1
-                    if progress_callback:
-                        progress_callback("rejudging", current, total)
+                    error_msg = test_result.error if test_result else "missing result"
+                    _call_progress(
+                        progress_callback,
+                        "rejudging",
+                        current,
+                        total,
+                        success=False,
+                        error_msg=error_msg,
+                    )
                     continue
 
                 # Run comparison with the provided judge
@@ -727,8 +796,15 @@ class ConstraintEvaluator:
                 )
 
                 current += 1
-                if progress_callback:
-                    progress_callback("rejudging", current, total)
+                success = comparison.error is None
+                _call_progress(
+                    progress_callback,
+                    "rejudging",
+                    current,
+                    total,
+                    success=success,
+                    error_msg=comparison.error,
+                )
 
     def _compare_pair_with_judge(
         self,

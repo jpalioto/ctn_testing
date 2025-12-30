@@ -17,6 +17,7 @@ from .output import PersistenceError
 
 # Note: evaluation module imported lazily to avoid circular import with judging
 # Use: from ctn_testing.runners.evaluation import ConstraintEvaluator
+# Progress output colors: from ctn_testing.runners.evaluation import format_status, GREEN, RED, RESET
 
 __all__ = [
     # Document (re-exported from core)
