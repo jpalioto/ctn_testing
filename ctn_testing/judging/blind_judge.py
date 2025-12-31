@@ -1,24 +1,27 @@
 """Blind judging system for constraint adherence evaluation."""
+
 import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..runners.http_runner import SDKRunner, SDKError
-from .traits import TraitDefinitions, load_traits
+from ..runners.http_runner import SDKError, SDKRunner
+from .traits import load_traits
 
 
 @dataclass
 class TraitScore:
     """Score for a single trait dimension."""
-    dimension: str      # e.g., "reasoning_depth"
-    score: int          # 0-100
+
+    dimension: str  # e.g., "reasoning_depth"
+    score: int  # 0-100
     reasons: list[str]  # Bullet points explaining score
 
 
 @dataclass
 class JudgingResult:
     """Result of blind judging two responses."""
+
     response_a_scores: dict[str, TraitScore] = field(default_factory=dict)
     response_b_scores: dict[str, TraitScore] = field(default_factory=dict)
     raw_response: str = ""  # For debugging
@@ -27,6 +30,7 @@ class JudgingResult:
 
 class JudgingError(Exception):
     """Error during judging process."""
+
     pass
 
 
@@ -193,25 +197,25 @@ Return JSON only (no markdown, no extra text):
     def _extract_json(self, text: str) -> str | None:
         """Extract JSON from text, handling markdown code blocks."""
         # Try to find JSON in markdown code block
-        code_block_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', text, re.DOTALL)
+        code_block_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
         if code_block_match:
             return code_block_match.group(1).strip()
 
         # Try to find raw JSON object
         # Look for outermost { } pair
-        brace_start = text.find('{')
+        brace_start = text.find("{")
         if brace_start == -1:
             return None
 
         # Find matching closing brace
         depth = 0
         for i, char in enumerate(text[brace_start:], start=brace_start):
-            if char == '{':
+            if char == "{":
                 depth += 1
-            elif char == '}':
+            elif char == "}":
                 depth -= 1
                 if depth == 0:
-                    return text[brace_start:i + 1]
+                    return text[brace_start : i + 1]
 
         return None
 

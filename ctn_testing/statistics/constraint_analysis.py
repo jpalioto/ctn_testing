@@ -1,25 +1,27 @@
 """Statistical analysis for constraint adherence comparisons."""
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .comparison import paired_comparison, ComparisonResult
+from .comparison import paired_comparison
 
 if TYPE_CHECKING:
-    from ..runners.evaluation import PairedComparison, EvaluationResult
+    from ..runners.evaluation import EvaluationResult, PairedComparison
 
 
 @dataclass
 class TraitComparison:
     """Statistical comparison for a single trait."""
+
     trait: str
     baseline_mean: float
     test_mean: float
     mean_diff: float
     t_stat: float
     p_value: float
-    effect_size: float        # Cohen's d
+    effect_size: float  # Cohen's d
     n: int
-    significant: bool         # p < 0.05
+    significant: bool  # p < 0.05
 
     @property
     def effect_interpretation(self) -> str:
@@ -48,16 +50,14 @@ class TraitComparison:
 @dataclass
 class ConstraintAnalysis:
     """Analysis of a single constraint vs baseline."""
+
     constraint: str
     n_prompts: int
     trait_comparisons: dict[str, TraitComparison] = field(default_factory=dict)
 
     def significant_traits(self) -> list[str]:
         """Traits where p < 0.05."""
-        return [
-            name for name, comp in self.trait_comparisons.items()
-            if comp.significant
-        ]
+        return [name for name, comp in self.trait_comparisons.items() if comp.significant]
 
     def best_trait(self) -> str | None:
         """Trait with largest positive effect size.
@@ -77,14 +77,16 @@ class ConstraintAnalysis:
     def improved_traits(self) -> list[str]:
         """Traits with significant positive effect (p < 0.05, mean_diff > 0)."""
         return [
-            name for name, comp in self.trait_comparisons.items()
+            name
+            for name, comp in self.trait_comparisons.items()
             if comp.significant and comp.mean_diff > 0
         ]
 
     def degraded_traits(self) -> list[str]:
         """Traits with significant negative effect (p < 0.05, mean_diff < 0)."""
         return [
-            name for name, comp in self.trait_comparisons.items()
+            name
+            for name, comp in self.trait_comparisons.items()
             if comp.significant and comp.mean_diff < 0
         ]
 
@@ -109,7 +111,8 @@ def analyze_constraint(
     """
     # Filter to valid comparisons (no errors, with scores)
     valid_comparisons = [
-        c for c in comparisons
+        c
+        for c in comparisons
         if not c.error
         and not c.judging_result.error
         and c.get_baseline_scores()

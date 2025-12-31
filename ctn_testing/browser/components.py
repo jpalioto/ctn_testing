@@ -1,10 +1,11 @@
 """Reusable UI components for CTN Results Browser."""
+
 import streamlit as st
+
 from ctn_testing.browser.data import (
-    RunSummary,
-    ResponseData,
     JudgingData,
-    ConstraintInfo,
+    ResponseData,
+    RunSummary,
 )
 
 
@@ -96,10 +97,7 @@ def render_kernel_info(
     kernel is applied by the SDK server and not stored in response data.
     """
     # Find the constraint config
-    constraint_config = next(
-        (c for c in run.constraint_configs if c.name == constraint),
-        None
-    )
+    constraint_config = next((c for c in run.constraint_configs if c.name == constraint), None)
 
     # Display strategy info
     st.markdown(f"**Strategy:** `{run.strategy or 'unknown'}`")
@@ -169,20 +167,24 @@ def render_scores_table(judging: JudgingData) -> None:
         baseline_data = judging.baseline_scores.get(trait, {})
         test_data = judging.test_scores.get(trait, {})
 
-        baseline_score = baseline_data.get("score", 0) if isinstance(baseline_data, dict) else baseline_data
+        baseline_score = (
+            baseline_data.get("score", 0) if isinstance(baseline_data, dict) else baseline_data
+        )
         test_score = test_data.get("score", 0) if isinstance(test_data, dict) else test_data
 
         delta = test_score - baseline_score
         delta_str = f"+{delta}" if delta > 0 else str(delta)
         delta_color = "green" if delta > 0 else "red" if delta < 0 else "gray"
 
-        rows.append({
-            "Trait": trait,
-            "Baseline": baseline_score,
-            "Test": test_score,
-            "Delta": delta_str,
-            "_delta_color": delta_color,
-        })
+        rows.append(
+            {
+                "Trait": trait,
+                "Baseline": baseline_score,
+                "Test": test_score,
+                "Delta": delta_str,
+                "_delta_color": delta_color,
+            }
+        )
 
     # Display as table
     st.markdown("| Trait | Baseline | Test | Delta |")
@@ -204,7 +206,9 @@ def render_scores_detail(judging: JudgingData) -> None:
         baseline_data = judging.baseline_scores.get(trait, {})
         test_data = judging.test_scores.get(trait, {})
 
-        baseline_score = baseline_data.get("score", 0) if isinstance(baseline_data, dict) else baseline_data
+        baseline_score = (
+            baseline_data.get("score", 0) if isinstance(baseline_data, dict) else baseline_data
+        )
         test_score = test_data.get("score", 0) if isinstance(test_data, dict) else test_data
 
         with st.expander(f"**{trait}**: Baseline {baseline_score} vs Test {test_score}"):
@@ -212,7 +216,9 @@ def render_scores_detail(judging: JudgingData) -> None:
 
             with col1:
                 st.markdown("**Baseline Reasoning:**")
-                reasons = baseline_data.get("reasons", []) if isinstance(baseline_data, dict) else []
+                reasons = (
+                    baseline_data.get("reasons", []) if isinstance(baseline_data, dict) else []
+                )
                 if reasons:
                     for r in reasons:
                         st.markdown(f"- {r}")

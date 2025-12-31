@@ -1,17 +1,16 @@
 """Tests for constraint adherence statistical analysis."""
-import pytest
 
-from ctn_testing.statistics.constraint_analysis import (
-    TraitComparison,
-    ConstraintAnalysis,
-    analyze_constraint,
-    full_analysis,
-    format_report,
-)
 from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
 
 # Import evaluation types after other imports to avoid circular import
-from ctn_testing.runners.evaluation import PairedComparison, EvaluationResult
+from ctn_testing.runners.evaluation import EvaluationResult, PairedComparison
+from ctn_testing.statistics.constraint_analysis import (
+    ConstraintAnalysis,
+    TraitComparison,
+    analyze_constraint,
+    format_report,
+    full_analysis,
+)
 
 
 def make_trait_score(trait: str, score: int) -> TraitScore:
@@ -125,29 +124,57 @@ class TestTraitComparison:
         """Correct significance stars for p-values."""
         # p >= 0.05: no stars
         comp = TraitComparison(
-            trait="t", baseline_mean=0, test_mean=0, mean_diff=0,
-            t_stat=0, p_value=0.1, effect_size=0, n=10, significant=False,
+            trait="t",
+            baseline_mean=0,
+            test_mean=0,
+            mean_diff=0,
+            t_stat=0,
+            p_value=0.1,
+            effect_size=0,
+            n=10,
+            significant=False,
         )
         assert comp.significance_stars == ""
 
         # p < 0.05: one star
         comp = TraitComparison(
-            trait="t", baseline_mean=0, test_mean=0, mean_diff=0,
-            t_stat=0, p_value=0.03, effect_size=0, n=10, significant=True,
+            trait="t",
+            baseline_mean=0,
+            test_mean=0,
+            mean_diff=0,
+            t_stat=0,
+            p_value=0.03,
+            effect_size=0,
+            n=10,
+            significant=True,
         )
         assert comp.significance_stars == "*"
 
         # p < 0.01: two stars
         comp = TraitComparison(
-            trait="t", baseline_mean=0, test_mean=0, mean_diff=0,
-            t_stat=0, p_value=0.005, effect_size=0, n=10, significant=True,
+            trait="t",
+            baseline_mean=0,
+            test_mean=0,
+            mean_diff=0,
+            t_stat=0,
+            p_value=0.005,
+            effect_size=0,
+            n=10,
+            significant=True,
         )
         assert comp.significance_stars == "**"
 
         # p < 0.001: three stars
         comp = TraitComparison(
-            trait="t", baseline_mean=0, test_mean=0, mean_diff=0,
-            t_stat=0, p_value=0.0005, effect_size=0, n=10, significant=True,
+            trait="t",
+            baseline_mean=0,
+            test_mean=0,
+            mean_diff=0,
+            t_stat=0,
+            p_value=0.0005,
+            effect_size=0,
+            n=10,
+            significant=True,
         )
         assert comp.significance_stars == "***"
 
@@ -162,14 +189,26 @@ class TestConstraintAnalysis:
             n_prompts=10,
             trait_comparisons={
                 "reasoning": TraitComparison(
-                    trait="reasoning", baseline_mean=50, test_mean=70,
-                    mean_diff=20, t_stat=3.0, p_value=0.01, effect_size=0.9,
-                    n=10, significant=True,
+                    trait="reasoning",
+                    baseline_mean=50,
+                    test_mean=70,
+                    mean_diff=20,
+                    t_stat=3.0,
+                    p_value=0.01,
+                    effect_size=0.9,
+                    n=10,
+                    significant=True,
                 ),
                 "conciseness": TraitComparison(
-                    trait="conciseness", baseline_mean=60, test_mean=55,
-                    mean_diff=-5, t_stat=-1.0, p_value=0.3, effect_size=-0.2,
-                    n=10, significant=False,
+                    trait="conciseness",
+                    baseline_mean=60,
+                    test_mean=55,
+                    mean_diff=-5,
+                    t_stat=-1.0,
+                    p_value=0.3,
+                    effect_size=-0.2,
+                    n=10,
+                    significant=False,
                 ),
             },
         )
@@ -183,14 +222,26 @@ class TestConstraintAnalysis:
             n_prompts=10,
             trait_comparisons={
                 "reasoning": TraitComparison(
-                    trait="reasoning", baseline_mean=50, test_mean=70,
-                    mean_diff=20, t_stat=3.0, p_value=0.01, effect_size=0.9,
-                    n=10, significant=True,
+                    trait="reasoning",
+                    baseline_mean=50,
+                    test_mean=70,
+                    mean_diff=20,
+                    t_stat=3.0,
+                    p_value=0.01,
+                    effect_size=0.9,
+                    n=10,
+                    significant=True,
                 ),
                 "structure": TraitComparison(
-                    trait="structure", baseline_mean=50, test_mean=65,
-                    mean_diff=15, t_stat=2.5, p_value=0.02, effect_size=0.7,
-                    n=10, significant=True,
+                    trait="structure",
+                    baseline_mean=50,
+                    test_mean=65,
+                    mean_diff=15,
+                    t_stat=2.5,
+                    p_value=0.02,
+                    effect_size=0.7,
+                    n=10,
+                    significant=True,
                 ),
             },
         )
@@ -204,9 +255,15 @@ class TestConstraintAnalysis:
             n_prompts=10,
             trait_comparisons={
                 "completeness": TraitComparison(
-                    trait="completeness", baseline_mean=70, test_mean=60,
-                    mean_diff=-10, t_stat=-2.0, p_value=0.05, effect_size=-0.5,
-                    n=10, significant=True,
+                    trait="completeness",
+                    baseline_mean=70,
+                    test_mean=60,
+                    mean_diff=-10,
+                    t_stat=-2.0,
+                    p_value=0.05,
+                    effect_size=-0.5,
+                    n=10,
+                    significant=True,
                 ),
             },
         )
@@ -220,14 +277,26 @@ class TestConstraintAnalysis:
             n_prompts=10,
             trait_comparisons={
                 "reasoning": TraitComparison(
-                    trait="reasoning", baseline_mean=50, test_mean=70,
-                    mean_diff=20, t_stat=3.0, p_value=0.01, effect_size=0.9,
-                    n=10, significant=True,
+                    trait="reasoning",
+                    baseline_mean=50,
+                    test_mean=70,
+                    mean_diff=20,
+                    t_stat=3.0,
+                    p_value=0.01,
+                    effect_size=0.9,
+                    n=10,
+                    significant=True,
                 ),
                 "conciseness": TraitComparison(
-                    trait="conciseness", baseline_mean=60, test_mean=50,
-                    mean_diff=-10, t_stat=-2.0, p_value=0.04, effect_size=-0.5,
-                    n=10, significant=True,
+                    trait="conciseness",
+                    baseline_mean=60,
+                    test_mean=50,
+                    mean_diff=-10,
+                    t_stat=-2.0,
+                    p_value=0.04,
+                    effect_size=-0.5,
+                    n=10,
+                    significant=True,
                 ),
             },
         )
@@ -241,14 +310,26 @@ class TestConstraintAnalysis:
             n_prompts=10,
             trait_comparisons={
                 "reasoning": TraitComparison(
-                    trait="reasoning", baseline_mean=50, test_mean=70,
-                    mean_diff=20, t_stat=3.0, p_value=0.01, effect_size=0.9,
-                    n=10, significant=True,
+                    trait="reasoning",
+                    baseline_mean=50,
+                    test_mean=70,
+                    mean_diff=20,
+                    t_stat=3.0,
+                    p_value=0.01,
+                    effect_size=0.9,
+                    n=10,
+                    significant=True,
                 ),
                 "conciseness": TraitComparison(
-                    trait="conciseness", baseline_mean=60, test_mean=50,
-                    mean_diff=-10, t_stat=-2.0, p_value=0.04, effect_size=-0.5,
-                    n=10, significant=True,
+                    trait="conciseness",
+                    baseline_mean=60,
+                    test_mean=50,
+                    mean_diff=-10,
+                    t_stat=-2.0,
+                    p_value=0.04,
+                    effect_size=-0.5,
+                    n=10,
+                    significant=True,
                 ),
             },
         )
@@ -321,7 +402,9 @@ class TestAnalyzeConstraint:
     def test_handles_missing_traits(self):
         """Handles traits missing in some comparisons."""
         comparisons = [
-            make_comparison("p1", {"reasoning": 50, "conciseness": 60}, {"reasoning": 70, "conciseness": 50}),
+            make_comparison(
+                "p1", {"reasoning": 50, "conciseness": 60}, {"reasoning": 70, "conciseness": 50}
+            ),
             make_comparison("p2", {"reasoning": 55}, {"reasoning": 75}),  # Missing conciseness
         ]
 

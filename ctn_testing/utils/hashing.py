@@ -2,6 +2,7 @@
 
 Used for reproducibility verification - if hashes match, inputs are identical.
 """
+
 import hashlib
 import json
 from dataclasses import asdict, is_dataclass
@@ -10,10 +11,10 @@ from typing import Any
 
 def md5_hash(content: str | bytes) -> str:
     """Compute MD5 hash of content.
-    
+
     Args:
         content: String or bytes to hash
-        
+
     Returns:
         32-character hex digest
     """
@@ -24,10 +25,10 @@ def md5_hash(content: str | bytes) -> str:
 
 def hash_dict(d: dict[str, Any]) -> str:
     """Compute MD5 hash of dict via canonical JSON.
-    
+
     Args:
         d: Dictionary to hash
-        
+
     Returns:
         32-character hex digest
     """
@@ -38,12 +39,12 @@ def hash_dict(d: dict[str, Any]) -> str:
 
 def hash_config(config: Any) -> str:
     """Compute MD5 hash of a config object.
-    
+
     Works with dataclasses or objects with to_dict().
-    
+
     Args:
         config: Config object (dataclass or has to_dict)
-        
+
     Returns:
         32-character hex digest
     """
@@ -55,16 +56,16 @@ def hash_config(config: Any) -> str:
         d = config.__dict__
     else:
         raise TypeError(f"Cannot hash config of type {type(config)}")
-    
+
     return hash_dict(d)
 
 
 def hash_file(path: str) -> str:
     """Compute MD5 hash of file contents.
-    
+
     Args:
         path: Path to file
-        
+
     Returns:
         32-character hex digest
     """

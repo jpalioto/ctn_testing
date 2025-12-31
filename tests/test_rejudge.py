@@ -1,19 +1,18 @@
 """Tests for rejudge functionality."""
+
 import json
-import pytest
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ctn_testing.runners.output import RunOutputManager
+import pytest
+
+from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
 from ctn_testing.runners.constraint_runner import RunResult
 from ctn_testing.runners.evaluation import (
     ConstraintEvaluator,
     EvaluationResult,
-    PairedComparison,
 )
-from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
-
+from ctn_testing.runners.output import RunOutputManager
 
 # =============================================================================
 # Fixtures
@@ -57,17 +56,19 @@ def sample_run_results():
     for prompt_id in prompts:
         for constraint in constraints:
             prefix = "" if constraint == "baseline" else "@analytical "
-            results.append(RunResult(
-                prompt_id=prompt_id,
-                constraint_name=constraint,
-                input_sent=f"{prefix}What is {prompt_id}?",
-                output=f"Response for {prompt_id} with {constraint}",
-                provider="anthropic",
-                model="sonnet",
-                tokens={"input": 10, "output": 20},
-                timestamp="2025-01-15T10:30:00",
-                error=None,
-            ))
+            results.append(
+                RunResult(
+                    prompt_id=prompt_id,
+                    constraint_name=constraint,
+                    input_sent=f"{prefix}What is {prompt_id}?",
+                    output=f"Response for {prompt_id} with {constraint}",
+                    provider="anthropic",
+                    model="sonnet",
+                    tokens={"input": 10, "output": 20},
+                    timestamp="2025-01-15T10:30:00",
+                    error=None,
+                )
+            )
 
     return results
 
@@ -302,7 +303,9 @@ class TestRunOutputManagerRejudgeMode:
 class TestEvaluationResultLoadResponsesOnly:
     """Tests for EvaluationResult.load() with load_responses_only parameter."""
 
-    def test_load_responses_only_skips_judging_files(self, populated_run_dir, mock_config, tmp_path):
+    def test_load_responses_only_skips_judging_files(
+        self, populated_run_dir, mock_config, tmp_path
+    ):
         """load_responses_only=True skips loading judging files."""
         # Add some judging files to the run directory
         judging_dir = populated_run_dir / "judging"
@@ -327,7 +330,9 @@ class TestEvaluationResultLoadResponsesOnly:
         assert len(result.run_results) == 4  # 2 prompts × 2 constraints
         assert len(result.comparisons) == 0
 
-    def test_load_without_responses_only_loads_judging(self, populated_run_dir, mock_config, tmp_path):
+    def test_load_without_responses_only_loads_judging(
+        self, populated_run_dir, mock_config, tmp_path
+    ):
         """Default load() loads judging files."""
         # Add some judging files to the run directory
         judging_dir = populated_run_dir / "judging"
@@ -419,7 +424,7 @@ prompts:
 
     def test_creates_new_timestamped_folder(self, populated_run_dir, tmp_path):
         """Rejudge creates new timestamped folder in same parent directory."""
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = self._create_evaluator_mock(tmp_path)
 
             mock_judging_result = JudgingResult(
@@ -428,7 +433,7 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch('ctn_testing.runners.evaluation.BlindJudge') as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
                 MockBlindJudge.return_value = mock_judge
@@ -445,7 +450,7 @@ prompts:
 
     def test_new_folder_has_no_responses_directory(self, populated_run_dir, tmp_path):
         """Rejudge folder does not contain responses/ directory."""
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = self._create_evaluator_mock(tmp_path)
 
             mock_judging_result = JudgingResult(
@@ -454,7 +459,7 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch('ctn_testing.runners.evaluation.BlindJudge') as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
                 MockBlindJudge.return_value = mock_judge
@@ -468,7 +473,7 @@ prompts:
 
     def test_new_folder_has_standard_judging_directory(self, populated_run_dir, tmp_path):
         """Rejudge folder has standard judging/ directory (not suffixed)."""
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = self._create_evaluator_mock(tmp_path)
 
             mock_judging_result = JudgingResult(
@@ -477,7 +482,7 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch('ctn_testing.runners.evaluation.BlindJudge') as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
                 MockBlindJudge.return_value = mock_judge
@@ -494,7 +499,7 @@ prompts:
 
     def test_new_folder_has_standard_analysis_directory(self, populated_run_dir, tmp_path):
         """Rejudge folder has standard analysis/ directory (not suffixed)."""
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = self._create_evaluator_mock(tmp_path)
 
             mock_judging_result = JudgingResult(
@@ -503,7 +508,7 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch('ctn_testing.runners.evaluation.BlindJudge') as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
                 MockBlindJudge.return_value = mock_judge
@@ -518,7 +523,7 @@ prompts:
 
     def test_manifest_has_rejudge_metadata(self, populated_run_dir, tmp_path):
         """Manifest contains run_type, source_run_id, source_responses_path."""
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = self._create_evaluator_mock(tmp_path)
 
             mock_judging_result = JudgingResult(
@@ -527,7 +532,7 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch('ctn_testing.runners.evaluation.BlindJudge') as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
                 MockBlindJudge.return_value = mock_judge
@@ -550,7 +555,7 @@ prompts:
 
     def test_loads_existing_responses(self, populated_run_dir, tmp_path):
         """Loads responses from existing run directory."""
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = self._create_evaluator_mock(tmp_path)
 
             mock_judging_result = JudgingResult(
@@ -559,7 +564,7 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch('ctn_testing.runners.evaluation.BlindJudge') as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
                 MockBlindJudge.return_value = mock_judge
@@ -573,7 +578,7 @@ prompts:
 
     def test_skips_sdk_calls(self, populated_run_dir, tmp_path):
         """Does not invoke constraint_runner (no SDK calls)."""
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = self._create_evaluator_mock(tmp_path)
             evaluator.constraint_runner = MagicMock()  # Should NOT be called
 
@@ -583,7 +588,7 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch('ctn_testing.runners.evaluation.BlindJudge') as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
                 MockBlindJudge.return_value = mock_judge
@@ -598,7 +603,7 @@ prompts:
 
     def test_judge_model_override_works(self, populated_run_dir, tmp_path):
         """Judge model override is passed to BlindJudge."""
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = self._create_evaluator_mock(tmp_path)
 
             mock_judging_result = JudgingResult(
@@ -607,7 +612,7 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch('ctn_testing.runners.evaluation.BlindJudge') as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
                 MockBlindJudge.return_value = mock_judge
@@ -627,12 +632,12 @@ prompts:
     def test_original_files_unchanged(self, populated_run_dir, tmp_path):
         """Original responses/, judging/, analysis/ are not modified."""
         # Record original state
-        original_responses = sorted([
-            f.name for f in (populated_run_dir / "responses").glob("*.json")
-        ])
+        original_responses = sorted(
+            [f.name for f in (populated_run_dir / "responses").glob("*.json")]
+        )
         original_manifest = (populated_run_dir / "manifest.json").read_text()
 
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = self._create_evaluator_mock(tmp_path)
 
             mock_judging_result = JudgingResult(
@@ -641,7 +646,7 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch('ctn_testing.runners.evaluation.BlindJudge') as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
                 MockBlindJudge.return_value = mock_judge
@@ -651,9 +656,9 @@ prompts:
                 )
 
         # Verify original files unchanged
-        current_responses = sorted([
-            f.name for f in (populated_run_dir / "responses").glob("*.json")
-        ])
+        current_responses = sorted(
+            [f.name for f in (populated_run_dir / "responses").glob("*.json")]
+        )
         current_manifest = (populated_run_dir / "manifest.json").read_text()
 
         assert current_responses == original_responses
@@ -666,7 +671,7 @@ prompts:
         (run_dir / "manifest.json").write_text('{"config_file": "test.yaml", "started_at": ""}')
         (run_dir / "responses").mkdir()  # Empty responses dir
 
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = ConstraintEvaluator.__new__(ConstraintEvaluator)
             evaluator.config = MagicMock()
             evaluator.config.judge_models = []
@@ -683,7 +688,7 @@ prompts:
         def track_progress(stage, current, total):
             progress_calls.append((stage, current, total))
 
-        with patch.object(ConstraintEvaluator, '__init__', lambda self, *args, **kwargs: None):
+        with patch.object(ConstraintEvaluator, "__init__", lambda self, *args, **kwargs: None):
             evaluator = self._create_evaluator_mock(tmp_path)
 
             mock_judging_result = JudgingResult(
@@ -692,7 +697,7 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch('ctn_testing.runners.evaluation.BlindJudge') as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
                 MockBlindJudge.return_value = mock_judge

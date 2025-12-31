@@ -1,16 +1,18 @@
 """Tests for evaluation output management."""
+
 import json
 import os
-import pytest
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from ctn_testing.runners.output import (
+    NullOutputManager,
     PersistenceError,
     RunManifest,
     RunOutputManager,
-    NullOutputManager,
 )
 
 
@@ -241,7 +243,9 @@ class TestRunOutputManager:
         assert manifest["models"] == mock_config.models
         assert manifest["judge_models"] == mock_config.judge_models
 
-    def test_manifest_has_expected_call_counts(self, temp_output_dir, mock_config, temp_config_file):
+    def test_manifest_has_expected_call_counts(
+        self, temp_output_dir, mock_config, temp_config_file
+    ):
         """Manifest contains expected SDK and judge call counts."""
         manager = RunOutputManager(
             base_dir=temp_output_dir,
@@ -402,7 +406,9 @@ class TestNullOutputManager:
 class TestOutputManagerIntegration:
     """Integration tests for output manager with evaluation config."""
 
-    def test_multiple_runs_create_separate_folders(self, temp_output_dir, mock_config, temp_config_file):
+    def test_multiple_runs_create_separate_folders(
+        self, temp_output_dir, mock_config, temp_config_file
+    ):
         """Multiple runs create separate timestamped folders."""
         # Use mocked timestamps to ensure different run IDs
         with patch("ctn_testing.runners.output.datetime") as mock_datetime:
@@ -473,7 +479,9 @@ class TestFailFastValidation:
 
             assert "Cannot create" in str(exc_info.value)
 
-    def test_raises_on_write_permission_denied(self, temp_output_dir, mock_config, temp_config_file):
+    def test_raises_on_write_permission_denied(
+        self, temp_output_dir, mock_config, temp_config_file
+    ):
         """Raises PersistenceError if directory is not writable."""
         manager = RunOutputManager(
             base_dir=temp_output_dir,
@@ -611,6 +619,7 @@ class TestResponsePersistence:
     def mock_run_result(self):
         """Create a mock RunResult."""
         from ctn_testing.runners.constraint_runner import RunResult
+
         return RunResult(
             prompt_id="recursion",
             constraint_name="analytical",
@@ -622,7 +631,9 @@ class TestResponsePersistence:
             timestamp="2025-12-30T12:45:05.000Z",
         )
 
-    def test_save_response_creates_file(self, temp_output_dir, mock_config, temp_config_file, mock_run_result):
+    def test_save_response_creates_file(
+        self, temp_output_dir, mock_config, temp_config_file, mock_run_result
+    ):
         """save_response creates response file in responses/ directory."""
         mock_config.output = {"include_raw_responses": True}
 
@@ -668,7 +679,9 @@ class TestResponsePersistence:
         expected_path = manager.responses_dir / "my_prompt_terse.json"
         assert expected_path.exists()
 
-    def test_save_response_contains_all_fields(self, temp_output_dir, mock_config, temp_config_file, mock_run_result):
+    def test_save_response_contains_all_fields(
+        self, temp_output_dir, mock_config, temp_config_file, mock_run_result
+    ):
         """Response file contains all required fields."""
         mock_config.output = {"include_raw_responses": True}
 
@@ -695,7 +708,9 @@ class TestResponsePersistence:
         assert data["tokens"] == {"input": 22, "output": 423}
         assert data["timestamp"] == "2025-12-30T12:45:05.000Z"
 
-    def test_save_response_include_raw_false_nullifies_output(self, temp_output_dir, mock_config, temp_config_file, mock_run_result):
+    def test_save_response_include_raw_false_nullifies_output(
+        self, temp_output_dir, mock_config, temp_config_file, mock_run_result
+    ):
         """When include_raw_responses is false, output is null."""
         mock_config.output = {"include_raw_responses": False}
 
@@ -718,7 +733,9 @@ class TestResponsePersistence:
         assert data["prompt_id"] == "recursion"
         assert data["tokens"] == {"input": 22, "output": 423}
 
-    def test_save_response_includes_error_if_present(self, temp_output_dir, mock_config, temp_config_file):
+    def test_save_response_includes_error_if_present(
+        self, temp_output_dir, mock_config, temp_config_file
+    ):
         """Response file includes error field if run had an error."""
         from ctn_testing.runners.constraint_runner import RunResult
 
@@ -751,7 +768,9 @@ class TestResponsePersistence:
 
         assert data["error"] == "SDK connection failed"
 
-    def test_save_response_raises_on_write_failure(self, temp_output_dir, mock_config, temp_config_file, mock_run_result):
+    def test_save_response_raises_on_write_failure(
+        self, temp_output_dir, mock_config, temp_config_file, mock_run_result
+    ):
         """save_response raises PersistenceError on write failure."""
         mock_config.output = {"include_raw_responses": True}
 
@@ -769,7 +788,9 @@ class TestResponsePersistence:
 
             assert "Cannot save to" in str(exc_info.value)
 
-    def test_save_response_atomic_no_partial_files(self, temp_output_dir, mock_config, temp_config_file, mock_run_result):
+    def test_save_response_atomic_no_partial_files(
+        self, temp_output_dir, mock_config, temp_config_file, mock_run_result
+    ):
         """On write failure, no partial files are left behind."""
         mock_config.output = {"include_raw_responses": True}
 
@@ -782,6 +803,7 @@ class TestResponsePersistence:
 
         # Mock os.replace to fail after temp file is written
         original_replace = os.replace
+
         def failing_replace(src, dst):
             raise OSError("Replace failed")
 
@@ -795,7 +817,9 @@ class TestResponsePersistence:
         response_files = [f for f in response_files if f.is_file()]
         assert len(response_files) == 0, f"Found unexpected files: {response_files}"
 
-    def test_responses_dir_created_on_initialize(self, temp_output_dir, mock_config, temp_config_file):
+    def test_responses_dir_created_on_initialize(
+        self, temp_output_dir, mock_config, temp_config_file
+    ):
         """responses/ directory is created during initialization."""
         manager = RunOutputManager(
             base_dir=temp_output_dir,
@@ -860,17 +884,25 @@ class TestJudgingPersistence:
     @pytest.fixture
     def mock_comparison(self):
         """Create a mock PairedComparison."""
-        from ctn_testing.runners.evaluation import PairedComparison
         from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+        from ctn_testing.runners.evaluation import PairedComparison
 
         judging_result = JudgingResult(
             response_a_scores={
-                "reasoning_depth": TraitScore(dimension="reasoning_depth", score=65, reasons=["Good structure"]),
-                "conciseness": TraitScore(dimension="conciseness", score=78, reasons=["Well organized"]),
+                "reasoning_depth": TraitScore(
+                    dimension="reasoning_depth", score=65, reasons=["Good structure"]
+                ),
+                "conciseness": TraitScore(
+                    dimension="conciseness", score=78, reasons=["Well organized"]
+                ),
             },
             response_b_scores={
-                "reasoning_depth": TraitScore(dimension="reasoning_depth", score=82, reasons=["Excellent depth"]),
-                "conciseness": TraitScore(dimension="conciseness", score=71, reasons=["Slightly verbose"]),
+                "reasoning_depth": TraitScore(
+                    dimension="reasoning_depth", score=82, reasons=["Excellent depth"]
+                ),
+                "conciseness": TraitScore(
+                    dimension="conciseness", score=71, reasons=["Slightly verbose"]
+                ),
             },
             raw_response='{"scores": {...}}',
         )
@@ -886,7 +918,9 @@ class TestJudgingPersistence:
             baseline_was_a=True,
         )
 
-    def test_save_judging_creates_file(self, temp_output_dir, mock_config, temp_config_file, mock_comparison):
+    def test_save_judging_creates_file(
+        self, temp_output_dir, mock_config, temp_config_file, mock_comparison
+    ):
         """save_judging creates judging file in judging/ directory."""
         mock_config.output = {"include_raw_responses": True, "include_judge_responses": True}
 
@@ -908,8 +942,8 @@ class TestJudgingPersistence:
 
     def test_save_judging_filename_format(self, temp_output_dir, mock_config, temp_config_file):
         """Filename follows {prompt_id}_{test}_vs_{baseline}.json format."""
-        from ctn_testing.runners.evaluation import PairedComparison
         from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+        from ctn_testing.runners.evaluation import PairedComparison
 
         mock_config.output = {"include_raw_responses": True, "include_judge_responses": True}
 
@@ -943,7 +977,9 @@ class TestJudgingPersistence:
         expected_path = manager.judging_dir / "my_prompt_terse_vs_control.json"
         assert expected_path.exists()
 
-    def test_save_judging_contains_all_fields(self, temp_output_dir, mock_config, temp_config_file, mock_comparison):
+    def test_save_judging_contains_all_fields(
+        self, temp_output_dir, mock_config, temp_config_file, mock_comparison
+    ):
         """Judging file contains all required fields."""
         mock_config.output = {"include_raw_responses": True, "include_judge_responses": True}
 
@@ -982,7 +1018,9 @@ class TestJudgingPersistence:
         assert data["scores"]["baseline"]["reasoning_depth"]["reasons"] == ["Good structure"]
         assert data["scores"]["test"]["reasoning_depth"]["score"] == 82
 
-    def test_save_judging_include_judge_responses_false(self, temp_output_dir, mock_config, temp_config_file, mock_comparison):
+    def test_save_judging_include_judge_responses_false(
+        self, temp_output_dir, mock_config, temp_config_file, mock_comparison
+    ):
         """When include_judge_responses is false, judge_raw_response is null."""
         mock_config.output = {"include_raw_responses": True, "include_judge_responses": False}
 
@@ -1007,7 +1045,9 @@ class TestJudgingPersistence:
         # But scores should still be present
         assert data["scores"]["baseline"]["reasoning_depth"]["score"] == 65
 
-    def test_save_judging_include_raw_responses_false(self, temp_output_dir, mock_config, temp_config_file, mock_comparison):
+    def test_save_judging_include_raw_responses_false(
+        self, temp_output_dir, mock_config, temp_config_file, mock_comparison
+    ):
         """When include_raw_responses is false, baseline_response and test_response are null."""
         mock_config.output = {"include_raw_responses": False, "include_judge_responses": True}
 
@@ -1034,10 +1074,12 @@ class TestJudgingPersistence:
         assert data["scores"]["baseline"]["reasoning_depth"]["score"] == 65
         assert data["judge_raw_response"] == '{"scores": {...}}'
 
-    def test_save_judging_includes_error_if_present(self, temp_output_dir, mock_config, temp_config_file):
+    def test_save_judging_includes_error_if_present(
+        self, temp_output_dir, mock_config, temp_config_file
+    ):
         """Judging file includes error field if comparison had an error."""
+        from ctn_testing.judging.blind_judge import JudgingResult
         from ctn_testing.runners.evaluation import PairedComparison
-        from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
 
         mock_config.output = {"include_raw_responses": True, "include_judge_responses": True}
 
@@ -1076,7 +1118,9 @@ class TestJudgingPersistence:
 
         assert data["error"] == "Judge failed to parse response"
 
-    def test_save_judging_raises_on_write_failure(self, temp_output_dir, mock_config, temp_config_file, mock_comparison):
+    def test_save_judging_raises_on_write_failure(
+        self, temp_output_dir, mock_config, temp_config_file, mock_comparison
+    ):
         """save_judging raises PersistenceError on write failure."""
         mock_config.output = {"include_raw_responses": True, "include_judge_responses": True}
 
@@ -1097,7 +1141,9 @@ class TestJudgingPersistence:
 
             assert "Cannot save to" in str(exc_info.value)
 
-    def test_save_judging_atomic_no_partial_files(self, temp_output_dir, mock_config, temp_config_file, mock_comparison):
+    def test_save_judging_atomic_no_partial_files(
+        self, temp_output_dir, mock_config, temp_config_file, mock_comparison
+    ):
         """On write failure, no partial files are left behind."""
         mock_config.output = {"include_raw_responses": True, "include_judge_responses": True}
 
@@ -1121,7 +1167,9 @@ class TestJudgingPersistence:
         judging_files = [f for f in judging_files if f.is_file()]
         assert len(judging_files) == 0
 
-    def test_judging_dir_created_on_initialize(self, temp_output_dir, mock_config, temp_config_file):
+    def test_judging_dir_created_on_initialize(
+        self, temp_output_dir, mock_config, temp_config_file
+    ):
         """judging/ directory is created during initialization."""
         manager = RunOutputManager(
             base_dir=temp_output_dir,
@@ -1146,8 +1194,8 @@ class TestJudgingPersistence:
 
     def test_multiple_judging_results_saved(self, temp_output_dir, mock_config, temp_config_file):
         """Multiple judging results can be saved for different comparisons."""
-        from ctn_testing.runners.evaluation import PairedComparison
         from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+        from ctn_testing.runners.evaluation import PairedComparison
 
         mock_config.output = {"include_raw_responses": True, "include_judge_responses": True}
 
@@ -1188,7 +1236,9 @@ class TestJudgingPersistence:
 
         # Verify all files created
         for prompt_id, test_constraint, baseline_constraint in combos:
-            path = manager.judging_dir / f"{prompt_id}_{test_constraint}_vs_{baseline_constraint}.json"
+            path = (
+                manager.judging_dir / f"{prompt_id}_{test_constraint}_vs_{baseline_constraint}.json"
+            )
             assert path.exists(), f"Missing file: {path}"
 
 
@@ -1198,8 +1248,8 @@ class TestAnalysisPersistence:
     @pytest.fixture
     def mock_evaluation_result(self):
         """Create a mock EvaluationResult with comparisons."""
-        from ctn_testing.runners.evaluation import EvaluationResult, PairedComparison
         from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+        from ctn_testing.runners.evaluation import EvaluationResult, PairedComparison
 
         def make_comparison(prompt_id, test_constraint, baseline_scores, test_scores):
             a_scores = {k: TraitScore(k, v, []) for k, v in baseline_scores.items()}
@@ -1222,10 +1272,30 @@ class TestAnalysisPersistence:
             config_name="test_config",
             timestamp="2025-01-01T00:00:00Z",
             comparisons=[
-                make_comparison("p1", "analytical", {"reasoning": 50, "conciseness": 70}, {"reasoning": 75, "conciseness": 60}),
-                make_comparison("p2", "analytical", {"reasoning": 55, "conciseness": 65}, {"reasoning": 80, "conciseness": 55}),
-                make_comparison("p1", "terse", {"reasoning": 50, "conciseness": 70}, {"reasoning": 45, "conciseness": 90}),
-                make_comparison("p2", "terse", {"reasoning": 55, "conciseness": 65}, {"reasoning": 50, "conciseness": 85}),
+                make_comparison(
+                    "p1",
+                    "analytical",
+                    {"reasoning": 50, "conciseness": 70},
+                    {"reasoning": 75, "conciseness": 60},
+                ),
+                make_comparison(
+                    "p2",
+                    "analytical",
+                    {"reasoning": 55, "conciseness": 65},
+                    {"reasoning": 80, "conciseness": 55},
+                ),
+                make_comparison(
+                    "p1",
+                    "terse",
+                    {"reasoning": 50, "conciseness": 70},
+                    {"reasoning": 45, "conciseness": 90},
+                ),
+                make_comparison(
+                    "p2",
+                    "terse",
+                    {"reasoning": 55, "conciseness": 65},
+                    {"reasoning": 50, "conciseness": 85},
+                ),
             ],
         )
         return result
@@ -1306,7 +1376,9 @@ class TestAnalysisPersistence:
         assert manager.analysis_dir.exists()
         assert manager.analysis_dir.is_dir()
 
-    def test_save_analysis_creates_summary_json(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+    def test_save_analysis_creates_summary_json(
+        self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses
+    ):
         """save_analysis creates summary.json in analysis/ directory."""
         mock_config.output = {}
         mock_config.baseline_constraint = MagicMock()
@@ -1324,7 +1396,9 @@ class TestAnalysisPersistence:
         summary_path = manager.analysis_dir / "summary.json"
         assert summary_path.exists()
 
-    def test_save_analysis_creates_comparisons_json(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+    def test_save_analysis_creates_comparisons_json(
+        self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses
+    ):
         """save_analysis creates comparisons.json in analysis/ directory."""
         mock_config.output = {}
         mock_config.baseline_constraint = MagicMock()
@@ -1342,7 +1416,9 @@ class TestAnalysisPersistence:
         comparisons_path = manager.analysis_dir / "comparisons.json"
         assert comparisons_path.exists()
 
-    def test_summary_json_contains_required_fields(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+    def test_summary_json_contains_required_fields(
+        self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses
+    ):
         """summary.json contains all required fields."""
         mock_config.output = {}
         mock_config.name = "test_eval"
@@ -1371,7 +1447,9 @@ class TestAnalysisPersistence:
         assert "analytical" in data["results"]
         assert "terse" in data["results"]
 
-    def test_summary_json_contains_statistics(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+    def test_summary_json_contains_statistics(
+        self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses
+    ):
         """summary.json contains statistics per constraint."""
         mock_config.output = {}
         mock_config.name = "test_eval"
@@ -1406,7 +1484,9 @@ class TestAnalysisPersistence:
         assert reasoning["effect_interpretation"] == "large"
         assert reasoning["significant"] is True
 
-    def test_comparisons_json_contains_all_comparisons(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+    def test_comparisons_json_contains_all_comparisons(
+        self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses
+    ):
         """comparisons.json contains all paired comparisons."""
         mock_config.output = {}
         mock_config.baseline_constraint = MagicMock()
@@ -1428,7 +1508,9 @@ class TestAnalysisPersistence:
         assert "generated_at" in data
         assert len(data["comparisons"]) == 4  # 2 prompts × 2 constraints
 
-    def test_comparisons_json_contains_deltas(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+    def test_comparisons_json_contains_deltas(
+        self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses
+    ):
         """comparisons.json contains correctly computed deltas."""
         mock_config.output = {}
         mock_config.baseline_constraint = MagicMock()
@@ -1449,7 +1531,8 @@ class TestAnalysisPersistence:
 
         # Find p1 analytical comparison
         p1_analytical = next(
-            c for c in data["comparisons"]
+            c
+            for c in data["comparisons"]
             if c["prompt_id"] == "p1" and c["test_constraint"] == "analytical"
         )
 
@@ -1461,7 +1544,9 @@ class TestAnalysisPersistence:
         assert p1_analytical["test_scores"]["conciseness"] == 60
         assert p1_analytical["deltas"]["conciseness"] == -10  # 60 - 70
 
-    def test_save_analysis_raises_on_write_failure(self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses):
+    def test_save_analysis_raises_on_write_failure(
+        self, temp_output_dir, mock_config, temp_config_file, mock_evaluation_result, mock_analyses
+    ):
         """save_analysis raises PersistenceError on write failure."""
         mock_config.output = {}
         mock_config.baseline_constraint = MagicMock()
@@ -1480,7 +1565,9 @@ class TestAnalysisPersistence:
 
             assert "Cannot save to" in str(exc_info.value)
 
-    def test_save_analysis_works_with_empty_results(self, temp_output_dir, mock_config, temp_config_file):
+    def test_save_analysis_works_with_empty_results(
+        self, temp_output_dir, mock_config, temp_config_file
+    ):
         """save_analysis works with no comparisons."""
         from ctn_testing.runners.evaluation import EvaluationResult
 
@@ -1526,10 +1613,12 @@ class TestAnalysisPersistence:
         # Should not raise
         manager.save_analysis(mock_evaluation_result, mock_analyses)
 
-    def test_save_analysis_skips_error_comparisons(self, temp_output_dir, mock_config, temp_config_file):
+    def test_save_analysis_skips_error_comparisons(
+        self, temp_output_dir, mock_config, temp_config_file
+    ):
         """Comparisons with errors are skipped in comparisons.json."""
-        from ctn_testing.runners.evaluation import EvaluationResult, PairedComparison
         from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+        from ctn_testing.runners.evaluation import EvaluationResult, PairedComparison
 
         mock_config.output = {}
         mock_config.baseline_constraint = MagicMock()
@@ -1628,7 +1717,7 @@ class TestUTF8Encoding:
 
     def test_greek_symbols_survive_roundtrip(self, temp_output_dir, mock_config, temp_config_file):
         """Greek symbols (Σ, Ψ, Ω, τ) survive write/read roundtrip."""
-        from ctn_testing.runners.constraint_runner import RunResult, DryRunData
+        from ctn_testing.runners.constraint_runner import DryRunData, RunResult
 
         mock_config.output = {"include_raw_responses": True}
 
@@ -1692,8 +1781,8 @@ class TestUTF8Encoding:
 
     def test_greek_symbols_in_judging_file(self, temp_output_dir, mock_config, temp_config_file):
         """Greek symbols survive in judging result files."""
-        from ctn_testing.runners.evaluation import PairedComparison
         from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+        from ctn_testing.runners.evaluation import PairedComparison
 
         mock_config.output = {"include_raw_responses": True, "include_judge_responses": True}
 
@@ -1715,7 +1804,11 @@ class TestUTF8Encoding:
             test_response=greek_response,
             judging_result=JudgingResult(
                 response_a_scores={"depth": TraitScore("depth", 50, ["Good Σ usage"])},
-                response_b_scores={"depth": TraitScore("depth", 75, ["Excellent Ψ reasoning", "Clear Ω conclusion"])},
+                response_b_scores={
+                    "depth": TraitScore(
+                        "depth", 75, ["Excellent Ψ reasoning", "Clear Ω conclusion"]
+                    )
+                },
                 raw_response='{"analysis": "Σ Ψ Ω τ symbols used"}',
             ),
             baseline_was_a=True,
@@ -1741,7 +1834,9 @@ class TestUTF8Encoding:
         assert "Ψ" in data["scores"]["test"]["depth"]["reasons"][0]
         assert "Ω" in data["scores"]["test"]["depth"]["reasons"][1]
 
-    def test_ensure_ascii_false_no_unicode_escapes(self, temp_output_dir, mock_config, temp_config_file):
+    def test_ensure_ascii_false_no_unicode_escapes(
+        self, temp_output_dir, mock_config, temp_config_file
+    ):
         """Files don't contain unicode escape sequences like \\u03a3."""
         from ctn_testing.runners.constraint_runner import RunResult
 
@@ -1812,8 +1907,8 @@ class TestUTF8Encoding:
 
     def test_analysis_utf8_encoding(self, temp_output_dir, mock_config, temp_config_file):
         """Analysis files support UTF-8 characters in trait names."""
-        from ctn_testing.runners.evaluation import EvaluationResult, PairedComparison
         from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+        from ctn_testing.runners.evaluation import EvaluationResult, PairedComparison
         from ctn_testing.statistics.constraint_analysis import ConstraintAnalysis, TraitComparison
 
         mock_config.output = {}

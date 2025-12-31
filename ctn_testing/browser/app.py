@@ -1,30 +1,31 @@
 """CTN Testing Results Browser - Main Streamlit App."""
-import streamlit as st
-from pathlib import Path
-import sys
 
-from ctn_testing.browser.data import (
-    list_runs,
-    load_responses,
-    load_judgings,
-    get_manifest,
-    get_unique_prompts,
-    get_unique_constraints,
-    RunSummary,
-    ResponseData,
-)
+import sys
+from pathlib import Path
+
+import streamlit as st
+
 from ctn_testing.browser.components import (
-    render_run_info,
-    render_response_detail,
-    render_response_comparison,
-    render_kernel_info,
-    render_scores_table,
-    render_scores_detail,
-    render_errors_list,
     format_run_label,
+    render_errors_list,
+    render_kernel_info,
+    render_response_comparison,
+    render_response_detail,
+    render_run_info,
+    render_scores_detail,
+    render_scores_table,
 )
-from ctn_testing.statistics.constraint_analysis import full_analysis, format_report
+from ctn_testing.browser.data import (
+    ResponseData,
+    RunSummary,
+    get_unique_constraints,
+    get_unique_prompts,
+    list_runs,
+    load_judgings,
+    load_responses,
+)
 from ctn_testing.runners.evaluation import EvaluationResult
+from ctn_testing.statistics.constraint_analysis import format_report, full_analysis
 
 
 @st.cache_data
@@ -109,17 +110,22 @@ def render_responses_tab(
     # Find the specific response
     resp_a = next(
         (r for r in responses_a if r.prompt_id == prompt_id and r.constraint_name == constraint),
-        None
+        None,
     )
 
     if run_b:
         responses_b = cached_load_responses(str(run_b.path))
         resp_b = next(
-            (r for r in responses_b if r.prompt_id == prompt_id and r.constraint_name == constraint),
-            None
+            (
+                r
+                for r in responses_b
+                if r.prompt_id == prompt_id and r.constraint_name == constraint
+            ),
+            None,
         )
         render_response_comparison(
-            resp_a, resp_b,
+            resp_a,
+            resp_b,
             label_a=f"Run A ({run_a.strategy or 'unknown'})",
             label_b=f"Run B ({run_b.strategy or 'unknown'})",
         )
@@ -179,14 +185,14 @@ def render_scores_tab(
     # Find matching judging
     judging_a = next(
         (j for j in judgings_a if j.prompt_id == prompt_id and j.test_constraint == constraint),
-        None
+        None,
     )
 
     if run_b:
         judgings_b = cached_load_judgings(str(run_b.path))
         judging_b = next(
             (j for j in judgings_b if j.prompt_id == prompt_id and j.test_constraint == constraint),
-            None
+            None,
         )
 
         col1, col2 = st.columns(2)
@@ -315,9 +321,9 @@ def main():
             selected_prompt = st.selectbox(
                 "Prompt",
                 [None] + prompts,
-                format_func=lambda x: "All prompts" if x is None else (
-                    f"{x[0]}: {x[1][:40]}..." if len(x[1]) > 40 else f"{x[0]}: {x[1]}"
-                ),
+                format_func=lambda x: "All prompts"
+                if x is None
+                else (f"{x[0]}: {x[1][:40]}..." if len(x[1]) > 40 else f"{x[0]}: {x[1]}"),
             )
 
         if constraints:
@@ -343,13 +349,15 @@ def main():
         return
 
     # Tab navigation
-    tabs = st.tabs([
-        "Summary",
-        "Responses",
-        "Kernels",
-        "Scores",
-        "Errors",
-    ])
+    tabs = st.tabs(
+        [
+            "Summary",
+            "Responses",
+            "Kernels",
+            "Scores",
+            "Errors",
+        ]
+    )
 
     with tabs[0]:
         render_summary_tab(run_a, run_b, prompt_id, constraint)

@@ -5,21 +5,18 @@ Verifies the entire pipeline wires up.
 
 Usage: python scripts/smoke_test.py
 """
+
 import json
-from pathlib import Path
 
 from ctn_testing.core import (
+    DocumentSchema,
+    Extraction,
+    FieldSchema,
+    GroundTruth,
     ModelConfig,
     get_client,
-    DocumentSchema,
-    FieldSchema,
-    Extraction,
-    GroundTruth,
-    Evidence,
-    ExtractionStatus,
 )
 from ctn_testing.metrics import composite_score
-
 
 # Hardcoded test document
 DOCUMENT = """
@@ -58,7 +55,7 @@ SCHEMA = DocumentSchema(
         FieldSchema(name="total_amount", description="Total amount due including tax"),
         FieldSchema(name="due_date", description="Payment due date"),
         FieldSchema(name="vendor_name", description="Company issuing the invoice"),
-    ]
+    ],
 )
 
 # Ground truth
@@ -94,13 +91,10 @@ OUTPUT_FORMAT = {
         {
             "field": "<field_name>",
             "value": "<extracted_value_or_null>",
-            "evidence": {
-                "quote": "<verbatim_quote_from_document>",
-                "page": 1
-            },
+            "evidence": {"quote": "<verbatim_quote_from_document>", "page": 1},
             "status": "ok | missing | ambiguous",
             "confidence": "high | medium | low",
-            "candidates": []
+            "candidates": [],
         }
     ]
 }
@@ -128,23 +122,24 @@ def run_smoke_test():
     print("=" * 60)
     print("CTN TESTING - SMOKE TEST")
     print("=" * 60)
-    
+
     # Check for API key
     import os
+
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print("\n[ERROR] ANTHROPIC_API_KEY not set.")
         print("Run: . .\\scripts\\activate.ps1")
         return
-    
+
     # Build prompt
     prompt = KERNEL_TEMPLATE.format(
         schema=SCHEMA.to_prompt(),
         output_format=json.dumps(OUTPUT_FORMAT, indent=2),
         document=DOCUMENT,
     )
-    
+
     print(f"\n[1/4] Prompt built ({len(prompt.split())} tokens approx)")
-    
+
     # Call model
     config = ModelConfig(
         provider="anthropic",
@@ -153,13 +148,13 @@ def run_smoke_test():
         temperature=0.0,
         max_tokens=1024,
     )
-    
+
     print(f"[2/4] Calling {config.name}...")
     client = get_client(config)
     result = client.complete(prompt)
-    
+
     print(f"      Tokens: {result.input_tokens} in, {result.output_tokens} out")
-    
+
     # Parse response
     print("[3/4] Parsing response...")
     try:
@@ -167,7 +162,7 @@ def run_smoke_test():
         if text.startswith("```"):
             lines = text.split("\n")
             text = "\n".join(lines[1:-1])
-        
+
         data = json.loads(text)
         extractions = [Extraction.from_dict(e) for e in data["extractions"]]
         print(f"      Parsed {len(extractions)} extractions")
@@ -175,34 +170,36 @@ def run_smoke_test():
         print(f"      [ERROR] Parse failed: {e}")
         print(f"      Raw response:\n{result.text[:500]}")
         return
-    
+
     # Score
     print("[4/4] Scoring...")
     print()
-    
+
     total_composite = 0.0
     for ext in extractions:
         gt = GROUND_TRUTH.get(ext.field_name)
         if not gt:
             print(f"  {ext.field_name}: [SKIP] No ground truth")
             continue
-        
+
         score = composite_score(ext, gt, DOCUMENT, PAGES)
         total_composite += score.composite
-        
+
         status = "✓" if score.value == 1.0 else "✗"
         print(f"  {ext.field_name}:")
         print(f"    Extracted: {ext.value}")
         print(f"    Expected:  {gt.value}")
-        print(f"    Value: {score.value:.2f} | Evidence: {score.evidence:.2f} | Page: {score.page:.2f}")
+        print(
+            f"    Value: {score.value:.2f} | Evidence: {score.evidence:.2f} | Page: {score.page:.2f}"
+        )
         print(f"    Composite: {score.composite:.2f} {status}")
         print()
-    
+
     avg = total_composite / len(GROUND_TRUTH)
     print("=" * 60)
     print(f"AVERAGE COMPOSITE: {avg:.2f}")
     print("=" * 60)
-    
+
     if avg > 0.8:
         print("\n[PASS] Pipeline works.")
     else:

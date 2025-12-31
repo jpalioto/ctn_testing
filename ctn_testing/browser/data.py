@@ -1,9 +1,10 @@
 """Data loading utilities for CTN Results Browser."""
+
+import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-import json
-import re
 
 import yaml
 
@@ -11,6 +12,7 @@ import yaml
 @dataclass
 class ConstraintInfo:
     """Information about a constraint from config."""
+
     name: str
     input_prefix: str
     description: str = ""
@@ -19,6 +21,7 @@ class ConstraintInfo:
 @dataclass
 class RunSummary:
     """Summary of a test run."""
+
     run_id: str
     path: Path
     timestamp: datetime
@@ -37,6 +40,7 @@ class RunSummary:
 @dataclass
 class ResponseData:
     """Data from a single response."""
+
     prompt_id: str
     prompt_text: str
     constraint_name: str
@@ -50,6 +54,7 @@ class ResponseData:
 @dataclass
 class JudgingData:
     """Data from a single judging comparison."""
+
     prompt_id: str
     prompt_text: str
     test_constraint: str
@@ -139,11 +144,13 @@ def get_constraint_configs(config: dict) -> list[ConstraintInfo]:
     result = []
     for c in constraints:
         if isinstance(c, dict):
-            result.append(ConstraintInfo(
-                name=c.get("name", ""),
-                input_prefix=c.get("input_prefix", ""),
-                description=c.get("description", ""),
-            ))
+            result.append(
+                ConstraintInfo(
+                    name=c.get("name", ""),
+                    input_prefix=c.get("input_prefix", ""),
+                    description=c.get("description", ""),
+                )
+            )
     return result
 
 
@@ -223,16 +230,18 @@ def load_responses(run_path: Path, limit: int | None = None) -> list[ResponseDat
             with open(response_file) as f:
                 data = json.load(f)
 
-            responses.append(ResponseData(
-                prompt_id=data.get("prompt_id", ""),
-                prompt_text=data.get("prompt_text", ""),
-                constraint_name=data.get("constraint_name", ""),
-                input_sent=data.get("input_sent", ""),
-                output=data.get("output", ""),
-                tokens_in=data.get("tokens", {}).get("input", 0),
-                tokens_out=data.get("tokens", {}).get("output", 0),
-                error=data.get("error"),
-            ))
+            responses.append(
+                ResponseData(
+                    prompt_id=data.get("prompt_id", ""),
+                    prompt_text=data.get("prompt_text", ""),
+                    constraint_name=data.get("constraint_name", ""),
+                    input_sent=data.get("input_sent", ""),
+                    output=data.get("output", ""),
+                    tokens_in=data.get("tokens", {}).get("input", 0),
+                    tokens_out=data.get("tokens", {}).get("output", 0),
+                    error=data.get("error"),
+                )
+            )
         except (json.JSONDecodeError, KeyError):
             continue
 
@@ -262,18 +271,20 @@ def load_judgings(run_path: Path) -> list[JudgingData]:
                 baseline_scores = data.get("response_b_scores", {})
                 test_scores = data.get("response_a_scores", {})
 
-            judgings.append(JudgingData(
-                prompt_id=data.get("prompt_id", ""),
-                prompt_text=data.get("prompt_text", ""),
-                test_constraint=data.get("test_constraint", ""),
-                baseline_constraint=data.get("baseline_constraint", "baseline"),
-                baseline_response=data.get("baseline_response", ""),
-                test_response=data.get("test_response", ""),
-                baseline_scores=baseline_scores,
-                test_scores=test_scores,
-                baseline_was_a=baseline_was_a,
-                raw_response=data.get("raw_judge_response"),
-            ))
+            judgings.append(
+                JudgingData(
+                    prompt_id=data.get("prompt_id", ""),
+                    prompt_text=data.get("prompt_text", ""),
+                    test_constraint=data.get("test_constraint", ""),
+                    baseline_constraint=data.get("baseline_constraint", "baseline"),
+                    baseline_response=data.get("baseline_response", ""),
+                    test_response=data.get("test_response", ""),
+                    baseline_scores=baseline_scores,
+                    test_scores=test_scores,
+                    baseline_was_a=baseline_was_a,
+                    raw_response=data.get("raw_judge_response"),
+                )
+            )
         except (json.JSONDecodeError, KeyError):
             continue
 
@@ -287,43 +298,33 @@ def extract_kernel(input_sent: str) -> tuple[str, str]:
         Tuple of (kernel_type, kernel_content)
     """
     # Check for CTN kernel
-    ctn_match = re.search(
-        r'CTN_KERNEL_SCHEMA\s*=\s*"""(.*?)"""',
-        input_sent,
-        re.DOTALL
-    )
+    ctn_match = re.search(r'CTN_KERNEL_SCHEMA\s*=\s*"""(.*?)"""', input_sent, re.DOTALL)
     if ctn_match:
         return ("ctn", ctn_match.group(1).strip())
 
     # Check for XML-style structural constraints
     structural_match = re.search(
-        r'<constraints>(.*?)</constraints>',
-        input_sent,
-        re.DOTALL | re.IGNORECASE
+        r"<constraints>(.*?)</constraints>", input_sent, re.DOTALL | re.IGNORECASE
     )
     if structural_match:
         return ("structural", structural_match.group(1).strip())
 
     # Check for operational/behavioral constraints
     behavioral_match = re.search(
-        r'(?:behavioral_constraints|system\s*prompt)[:\s]*(.*?)(?:\n\n|\Z)',
+        r"(?:behavioral_constraints|system\s*prompt)[:\s]*(.*?)(?:\n\n|\Z)",
         input_sent,
-        re.DOTALL | re.IGNORECASE
+        re.DOTALL | re.IGNORECASE,
     )
     if behavioral_match:
         return ("operational", behavioral_match.group(1).strip())
 
     # Check for any system message pattern
-    system_match = re.search(
-        r'\[System\](.*?)\[/System\]',
-        input_sent,
-        re.DOTALL | re.IGNORECASE
-    )
+    system_match = re.search(r"\[System\](.*?)\[/System\]", input_sent, re.DOTALL | re.IGNORECASE)
     if system_match:
         return ("system", system_match.group(1).strip())
 
     # Check for @constraint prefix
-    constraint_match = re.match(r'^@(\w+)\s+(.*)', input_sent, re.DOTALL)
+    constraint_match = re.match(r"^@(\w+)\s+(.*)", input_sent, re.DOTALL)
     if constraint_match:
         return (constraint_match.group(1), constraint_match.group(2).strip())
 

@@ -1,4 +1,5 @@
 """Runner for constraint adherence evaluation."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -6,20 +7,22 @@ from typing import Any
 
 import yaml
 
-from .http_runner import SDKRunner, SDKError, DryRunInfo, CombinedResponse
+from .http_runner import SDKError, SDKRunner
 
 
 @dataclass
 class ConstraintConfig:
     """Configuration for a constraint to test."""
-    name: str           # e.g., "analytical"
-    input_prefix: str   # e.g., "@analytical "
+
+    name: str  # e.g., "analytical"
+    input_prefix: str  # e.g., "@analytical "
     description: str = ""
 
 
 @dataclass
 class PromptConfig:
     """Configuration for a test prompt."""
+
     id: str
     text: str
     category: str
@@ -30,6 +33,7 @@ class PromptConfig:
 @dataclass
 class DryRunData:
     """Dry-run data captured before actual model call."""
+
     kernel: str
     system_prompt: str
     user_prompt: str
@@ -48,9 +52,10 @@ class DryRunData:
 @dataclass
 class RunResult:
     """Result of running a single prompt with a constraint."""
+
     prompt_id: str
     constraint_name: str
-    input_sent: str           # Full input with prefix
+    input_sent: str  # Full input with prefix
     output: str
     provider: str
     model: str
@@ -177,6 +182,7 @@ class ConstraintRunner:
                 )
                 # Handle the union type
                 from .http_runner import SDKResponse
+
                 assert isinstance(response, SDKResponse)
 
                 return RunResult(
@@ -291,13 +297,15 @@ def load_prompts(path: Path) -> list[PromptConfig]:
         if not text:
             raise ValueError(f"Prompt '{prompt_id}' missing required 'text' field")
 
-        prompts.append(PromptConfig(
-            id=prompt_id,
-            text=text,
-            category=raw.get("category", ""),
-            complexity=raw.get("complexity", "medium"),
-            notes=raw.get("notes", ""),
-        ))
+        prompts.append(
+            PromptConfig(
+                id=prompt_id,
+                text=text,
+                category=raw.get("category", ""),
+                complexity=raw.get("complexity", "medium"),
+                notes=raw.get("notes", ""),
+            )
+        )
 
     return prompts
 
@@ -327,10 +335,12 @@ def load_constraints(config: dict) -> list[ConstraintConfig]:
         if not name:
             raise ValueError("Constraint missing required 'name' field")
 
-        constraints.append(ConstraintConfig(
-            name=name,
-            input_prefix=raw.get("input_prefix", ""),
-            description=raw.get("description", ""),
-        ))
+        constraints.append(
+            ConstraintConfig(
+                name=name,
+                input_prefix=raw.get("input_prefix", ""),
+                description=raw.get("description", ""),
+            )
+        )
 
     return constraints

@@ -1,22 +1,18 @@
 """Tests for browser data loading utilities."""
+
 import json
-import pytest
 from datetime import datetime
-from pathlib import Path
 
 from ctn_testing.browser.data import (
-    RunSummary,
     ResponseData,
-    JudgingData,
-    parse_run_timestamp,
     detect_strategy,
-    get_manifest,
-    list_runs,
-    load_responses,
-    load_judgings,
     extract_kernel,
-    get_unique_prompts,
     get_unique_constraints,
+    get_unique_prompts,
+    list_runs,
+    load_judgings,
+    load_responses,
+    parse_run_timestamp,
 )
 
 
@@ -60,14 +56,14 @@ class TestExtractKernel:
 
     def test_extracts_structural_constraints(self):
         """Extracts XML-style structural constraints."""
-        input_sent = '''
+        input_sent = """
         <constraints>
         <rule>Be concise</rule>
         <rule>Be accurate</rule>
         </constraints>
 
         User: Hello
-        '''
+        """
         kernel_type, content = extract_kernel(input_sent)
         assert kernel_type == "structural"
         assert "Be concise" in content
@@ -92,32 +88,36 @@ class TestDetectStrategy:
 
     def test_detects_ctn_from_response_content(self):
         """Detects CTN strategy from response content."""
-        responses = [ResponseData(
-            prompt_id="p1",
-            prompt_text="test",
-            constraint_name="test",
-            input_sent='CTN_KERNEL_SCHEMA = """..."""',
-            output="response",
-            tokens_in=10,
-            tokens_out=20,
-            error=None,
-        )]
+        responses = [
+            ResponseData(
+                prompt_id="p1",
+                prompt_text="test",
+                constraint_name="test",
+                input_sent='CTN_KERNEL_SCHEMA = """..."""',
+                output="response",
+                tokens_in=10,
+                tokens_out=20,
+                error=None,
+            )
+        ]
 
         strategy = detect_strategy({}, responses)
         assert strategy == "ctn"
 
     def test_detects_structural_from_response_content(self):
         """Detects structural strategy from response content."""
-        responses = [ResponseData(
-            prompt_id="p1",
-            prompt_text="test",
-            constraint_name="test",
-            input_sent='<constraints>...</constraints>',
-            output="response",
-            tokens_in=10,
-            tokens_out=20,
-            error=None,
-        )]
+        responses = [
+            ResponseData(
+                prompt_id="p1",
+                prompt_text="test",
+                constraint_name="test",
+                input_sent="<constraints>...</constraints>",
+                output="response",
+                tokens_in=10,
+                tokens_out=20,
+                error=None,
+            )
+        ]
 
         strategy = detect_strategy({}, responses)
         assert strategy == "structural"
@@ -136,26 +136,34 @@ class TestListRuns:
         # Create two run directories
         run1 = tmp_path / "2025-01-15T10-30-00-000000"
         run1.mkdir()
-        (run1 / "manifest.json").write_text(json.dumps({
-            "config_file": "test.yaml",
-            "prompts_count": 5,
-            "constraints": ["baseline", "analytical"],
-            "total_sdk_calls": 10,
-            "total_judge_calls": 5,
-            "errors": [],
-        }))
+        (run1 / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "config_file": "test.yaml",
+                    "prompts_count": 5,
+                    "constraints": ["baseline", "analytical"],
+                    "total_sdk_calls": 10,
+                    "total_judge_calls": 5,
+                    "errors": [],
+                }
+            )
+        )
         (run1 / "responses").mkdir()
 
         run2 = tmp_path / "2025-01-16T11-00-00-000000"
         run2.mkdir()
-        (run2 / "manifest.json").write_text(json.dumps({
-            "config_file": "test2.yaml",
-            "prompts_count": 3,
-            "constraints": ["baseline"],
-            "total_sdk_calls": 3,
-            "total_judge_calls": 0,
-            "errors": ["some error"],
-        }))
+        (run2 / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "config_file": "test2.yaml",
+                    "prompts_count": 3,
+                    "constraints": ["baseline"],
+                    "total_sdk_calls": 3,
+                    "total_judge_calls": 0,
+                    "errors": ["some error"],
+                }
+            )
+        )
 
         runs = list_runs(tmp_path)
 
@@ -179,14 +187,18 @@ class TestListRuns:
 
         run2 = tmp_path / "2025-01-16T11-00-00-000000"
         run2.mkdir()
-        (run2 / "manifest.json").write_text(json.dumps({
-            "config_file": "test.yaml",
-            "prompts_count": 5,
-            "constraints": [],
-            "total_sdk_calls": 0,
-            "total_judge_calls": 0,
-            "errors": [],
-        }))
+        (run2 / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "config_file": "test.yaml",
+                    "prompts_count": 5,
+                    "constraints": [],
+                    "total_sdk_calls": 0,
+                    "total_judge_calls": 0,
+                    "errors": [],
+                }
+            )
+        )
 
         runs = list_runs(tmp_path)
         assert len(runs) == 1
@@ -203,23 +215,31 @@ class TestLoadResponses:
         responses_dir = run_dir / "responses"
         responses_dir.mkdir()
 
-        (responses_dir / "p1_baseline.json").write_text(json.dumps({
-            "prompt_id": "p1",
-            "prompt_text": "What is 2+2?",
-            "constraint_name": "baseline",
-            "input_sent": "What is 2+2?",
-            "output": "4",
-            "tokens": {"input": 5, "output": 1},
-        }))
+        (responses_dir / "p1_baseline.json").write_text(
+            json.dumps(
+                {
+                    "prompt_id": "p1",
+                    "prompt_text": "What is 2+2?",
+                    "constraint_name": "baseline",
+                    "input_sent": "What is 2+2?",
+                    "output": "4",
+                    "tokens": {"input": 5, "output": 1},
+                }
+            )
+        )
 
-        (responses_dir / "p1_analytical.json").write_text(json.dumps({
-            "prompt_id": "p1",
-            "prompt_text": "What is 2+2?",
-            "constraint_name": "analytical",
-            "input_sent": "@analytical What is 2+2?",
-            "output": "The answer is 4",
-            "tokens": {"input": 6, "output": 3},
-        }))
+        (responses_dir / "p1_analytical.json").write_text(
+            json.dumps(
+                {
+                    "prompt_id": "p1",
+                    "prompt_text": "What is 2+2?",
+                    "constraint_name": "analytical",
+                    "input_sent": "@analytical What is 2+2?",
+                    "output": "The answer is 4",
+                    "tokens": {"input": 6, "output": 3},
+                }
+            )
+        )
 
         responses = load_responses(run_dir)
 
@@ -247,17 +267,21 @@ class TestLoadJudgings:
         judging_dir = run_dir / "judging"
         judging_dir.mkdir()
 
-        (judging_dir / "p1_analytical.json").write_text(json.dumps({
-            "prompt_id": "p1",
-            "prompt_text": "What is 2+2?",
-            "test_constraint": "analytical",
-            "baseline_constraint": "baseline",
-            "baseline_response": "4",
-            "test_response": "The answer is 4",
-            "baseline_was_a": True,
-            "response_a_scores": {"clarity": {"score": 70, "reasons": ["clear"]}},
-            "response_b_scores": {"clarity": {"score": 85, "reasons": ["very clear"]}},
-        }))
+        (judging_dir / "p1_analytical.json").write_text(
+            json.dumps(
+                {
+                    "prompt_id": "p1",
+                    "prompt_text": "What is 2+2?",
+                    "test_constraint": "analytical",
+                    "baseline_constraint": "baseline",
+                    "baseline_response": "4",
+                    "test_response": "The answer is 4",
+                    "baseline_was_a": True,
+                    "response_a_scores": {"clarity": {"score": 70, "reasons": ["clear"]}},
+                    "response_b_scores": {"clarity": {"score": 85, "reasons": ["very clear"]}},
+                }
+            )
+        )
 
         judgings = load_judgings(run_dir)
 

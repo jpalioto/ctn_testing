@@ -1,4 +1,5 @@
 """Evaluation orchestrator for constraint adherence testing."""
+
 import json
 import random
 from dataclasses import dataclass, field
@@ -8,20 +9,19 @@ from typing import Any, Callable
 
 import yaml
 
-from .http_runner import SDKRunner
-from .constraint_runner import (
-    ConstraintConfig,
-    PromptConfig,
-    RunResult,
-    ConstraintRunner,
-    load_prompts,
-    load_constraints,
-)
-from .output import RunOutputManager, NullOutputManager
 # Import directly from module to avoid circular import through __init__.py
 from ..judging.blind_judge import BlindJudge, JudgingResult, TraitScore  # noqa: E402
 from ..statistics.constraint_analysis import full_analysis  # noqa: E402
-
+from .constraint_runner import (
+    ConstraintConfig,
+    ConstraintRunner,
+    PromptConfig,
+    RunResult,
+    load_constraints,
+    load_prompts,
+)
+from .http_runner import SDKRunner
+from .output import NullOutputManager, RunOutputManager
 
 # ANSI color codes for terminal output
 GREEN = "\033[92m"
@@ -67,19 +67,20 @@ def _call_progress(
 @dataclass
 class EvaluationConfig:
     """Configuration for a constraint adherence evaluation."""
+
     name: str
     version: str
     description: str
-    runner: dict                          # {type, base_url, timeout, strategy}
-    prompts_source: str                   # Relative path to prompts.yaml
+    runner: dict  # {type, base_url, timeout, strategy}
+    prompts_source: str  # Relative path to prompts.yaml
     prompts_include_ids: list[str] | None  # Optional subset
-    models: list[dict]                    # [{name, provider}]
+    models: list[dict]  # [{name, provider}]
     constraints: list[ConstraintConfig]
-    judge_models: list[dict]              # [{name, provider, temperature, max_tokens}]
-    judging: dict                         # {blind, traits_definition}
-    execution: dict                       # {strategy, delay}
-    output: dict                          # {dir, include_raw_responses, ...}
-    config_dir: Path                      # Directory containing the config file
+    judge_models: list[dict]  # [{name, provider, temperature, max_tokens}]
+    judging: dict  # {blind, traits_definition}
+    execution: dict  # {strategy, delay}
+    output: dict  # {dir, include_raw_responses, ...}
+    config_dir: Path  # Directory containing the config file
 
     @property
     def prompts_path(self) -> Path:
@@ -111,15 +112,16 @@ class EvaluationConfig:
 @dataclass
 class PairedComparison:
     """Result of comparing baseline vs test constraint for one prompt."""
+
     prompt_id: str
     prompt_text: str
-    baseline_constraint: str      # Usually "baseline"
-    test_constraint: str          # e.g., "analytical"
+    baseline_constraint: str  # Usually "baseline"
+    test_constraint: str  # e.g., "analytical"
     baseline_response: str
     test_response: str
     judging_result: JudgingResult
-    baseline_was_a: bool          # For tracking randomization
-    error: str | None = None      # If comparison failed
+    baseline_was_a: bool  # For tracking randomization
+    error: str | None = None  # If comparison failed
 
     def get_baseline_scores(self) -> dict:
         """Get scores for baseline response."""
@@ -137,6 +139,7 @@ class PairedComparison:
 @dataclass
 class EvaluationResult:
     """Result of a full constraint adherence evaluation."""
+
     config_name: str
     timestamp: str
     run_results: list[RunResult] = field(default_factory=list)
@@ -189,8 +192,7 @@ class EvaluationResult:
             summary["by_constraint"][constraint] = {
                 "count": len(valid_comps),
                 "trait_deltas": {
-                    trait: sum(deltas) / len(deltas)
-                    for trait, deltas in trait_deltas.items()
+                    trait: sum(deltas) / len(deltas) for trait, deltas in trait_deltas.items()
                 },
             }
 
@@ -434,7 +436,9 @@ class ConstraintEvaluator:
         # Collect run errors
         for run_result in result.run_results:
             if run_result.error:
-                errors.append(f"Run error [{run_result.prompt_id}×{run_result.constraint_name}]: {run_result.error}")
+                errors.append(
+                    f"Run error [{run_result.prompt_id}×{run_result.constraint_name}]: {run_result.error}"
+                )
 
         # Phase 2: Compare baseline vs each test constraint
         self._judge_phase(result, progress_callback)
@@ -442,7 +446,9 @@ class ConstraintEvaluator:
         # Collect comparison errors
         for comp in result.comparisons:
             if comp.error:
-                errors.append(f"Judge error [{comp.prompt_id}×{comp.test_constraint}]: {comp.error}")
+                errors.append(
+                    f"Judge error [{comp.prompt_id}×{comp.test_constraint}]: {comp.error}"
+                )
 
         # Phase 3: Run statistical analysis and save results
         analyses = full_analysis(result)
@@ -450,6 +456,9 @@ class ConstraintEvaluator:
 
         # Finalize output (updates manifest with completion time and errors)
         self._output_manager.finalize(errors=errors)
+
+        # Set run_dir on result for access
+        result.run_dir = self._output_manager.run_dir
 
         return result
 
@@ -708,7 +717,9 @@ class ConstraintEvaluator:
         # Collect comparison errors
         for comp in result.comparisons:
             if comp.error:
-                errors.append(f"Judge error [{comp.prompt_id}×{comp.test_constraint}]: {comp.error}")
+                errors.append(
+                    f"Judge error [{comp.prompt_id}×{comp.test_constraint}]: {comp.error}"
+                )
 
         # Run statistical analysis and save results
         analyses = full_analysis(result)

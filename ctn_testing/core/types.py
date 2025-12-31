@@ -1,4 +1,5 @@
 """Core types for CTN evaluation."""
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -37,35 +38,27 @@ class Extraction:
     status: ExtractionStatus
     confidence: Confidence = Confidence.HIGH
     candidates: list[Candidate] = field(default_factory=list)
-    
+
     @classmethod
     def from_dict(cls, d: dict) -> "Extraction":
         """Parse from model output."""
         ev = d.get("evidence") or {}
         if ev is None:
             ev = {}
-        
+
         candidates = [
-            Candidate(
-                value=c.get("value"),
-                quote=c.get("quote"),
-                page=c.get("page")
-            )
+            Candidate(value=c.get("value"), quote=c.get("quote"), page=c.get("page"))
             for c in d.get("candidates", [])
         ]
-        
+
         return cls(
             field_name=d["field"],
             value=d.get("value"),
-            evidence=Evidence(
-                quote=ev.get("quote"),
-                page=ev.get("page")
-            ),
+            evidence=Evidence(quote=ev.get("quote"), page=ev.get("page")),
             status=ExtractionStatus(d.get("status", "ok")),
             confidence=Confidence(d.get("confidence", "high")),
-            candidates=candidates
+            candidates=candidates,
         )
-
 
 
 @dataclass(frozen=True)
@@ -90,7 +83,7 @@ class FieldSchema:
 class DocumentSchema:
     name: str
     fields: list[FieldSchema]
-    
+
     def to_prompt(self) -> str:
         lines = [f"Schema: {self.name}", "Fields:"]
         for f in self.fields:

@@ -1,19 +1,19 @@
 """Tests for evaluation orchestrator."""
-import json
+
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 
-from ctn_testing.runners.constraint_runner import ConstraintConfig, PromptConfig, RunResult
-from ctn_testing.runners.http_runner import (
-    SDKRunner,
-    SDKResponse,
-    DryRunInfo,
-    CombinedResponse,
-)
 from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+from ctn_testing.runners.constraint_runner import RunResult
+from ctn_testing.runners.http_runner import (
+    CombinedResponse,
+    DryRunInfo,
+    SDKResponse,
+    SDKRunner,
+)
 
 
 def make_combined_response(
@@ -42,15 +42,14 @@ def make_combined_response(
         kernel_match=True,
     )
 
+
 # Import evaluation separately to avoid circular import issues
 from ctn_testing.runners.evaluation import (
-    EvaluationConfig,
-    PairedComparison,
-    EvaluationResult,
     ConstraintEvaluator,
+    EvaluationResult,
+    PairedComparison,
     load_config,
 )
-
 
 # Sample config YAML
 SAMPLE_CONFIG_YAML = """
@@ -403,7 +402,7 @@ class TestConstraintEvaluator:
 
     def test_evaluator_initializes(self, config_path):
         """Evaluator initializes with config."""
-        with patch.object(SDKRunner, '__init__', return_value=None):
+        with patch.object(SDKRunner, "__init__", return_value=None):
             evaluator = ConstraintEvaluator(config_path)
 
             assert evaluator.config.name == "test_evaluation"
@@ -411,7 +410,7 @@ class TestConstraintEvaluator:
 
     def test_evaluator_respects_sdk_base_url_override(self, config_path):
         """Evaluator uses override SDK URL."""
-        with patch.object(SDKRunner, '__init__', return_value=None) as mock_init:
+        with patch.object(SDKRunner, "__init__", return_value=None) as mock_init:
             evaluator = ConstraintEvaluator(
                 config_path,
                 sdk_base_url="http://custom:9999",
@@ -425,8 +424,8 @@ class TestConstraintEvaluator:
 
     def test_run_produces_evaluation_result(self, config_path):
         """run() produces EvaluationResult with all combinations."""
-        with patch.object(SDKRunner, '__init__', return_value=None):
-            with patch.object(SDKRunner, 'send_with_dry_run') as mock_send:
+        with patch.object(SDKRunner, "__init__", return_value=None):
+            with patch.object(SDKRunner, "send_with_dry_run") as mock_send:
                 mock_send.return_value = make_combined_response()
 
                 evaluator = ConstraintEvaluator(config_path, random_seed=42)
@@ -440,8 +439,8 @@ class TestConstraintEvaluator:
 
     def test_comparisons_are_randomized(self, config_path):
         """Comparisons have randomized A/B order."""
-        with patch.object(SDKRunner, '__init__', return_value=None):
-            with patch.object(SDKRunner, 'send_with_dry_run') as mock_send:
+        with patch.object(SDKRunner, "__init__", return_value=None):
+            with patch.object(SDKRunner, "send_with_dry_run") as mock_send:
                 mock_send.return_value = make_combined_response()
 
                 # Run multiple times with different seeds
@@ -465,8 +464,8 @@ class TestConstraintEvaluator:
 
     def test_progress_callback_called(self, config_path):
         """Progress callback is called during run."""
-        with patch.object(SDKRunner, '__init__', return_value=None):
-            with patch.object(SDKRunner, 'send_with_dry_run') as mock_send:
+        with patch.object(SDKRunner, "__init__", return_value=None):
+            with patch.object(SDKRunner, "send_with_dry_run") as mock_send:
                 mock_send.return_value = make_combined_response()
 
                 callback = Mock()
@@ -486,8 +485,8 @@ class TestConstraintEvaluator:
         """Evaluator handles run errors and skips failed comparisons."""
         from ctn_testing.runners.http_runner import SDKError
 
-        with patch.object(SDKRunner, '__init__', return_value=None):
-            with patch.object(SDKRunner, 'send_with_dry_run') as mock_send:
+        with patch.object(SDKRunner, "__init__", return_value=None):
+            with patch.object(SDKRunner, "send_with_dry_run") as mock_send:
                 # First call succeeds, rest fail
                 call_count = [0]
 

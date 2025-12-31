@@ -1,12 +1,11 @@
 """Tests for colored progress output."""
-import pytest
 
 from ctn_testing.runners.evaluation import (
     GREEN,
     RED,
     RESET,
-    format_status,
     _call_progress,
+    format_status,
 )
 
 
@@ -58,9 +57,7 @@ class TestCallProgress:
         def new_callback(stage, current, total, success, error_msg):
             calls.append((stage, current, total, success, error_msg))
 
-        _call_progress(
-            new_callback, "judging", 5, 20, success=False, error_msg="API timeout"
-        )
+        _call_progress(new_callback, "judging", 5, 20, success=False, error_msg="API timeout")
 
         assert len(calls) == 1
         assert calls[0] == ("judging", 5, 20, False, "API timeout")
@@ -84,9 +81,7 @@ class TestCallProgress:
         def old_callback(stage, current, total):
             calls.append((stage, current, total))
 
-        _call_progress(
-            old_callback, "judging", 2, 10, success=False, error_msg="Some error"
-        )
+        _call_progress(old_callback, "judging", 2, 10, success=False, error_msg="Some error")
 
         # Old callback was still called, just without the extra args
         assert len(calls) == 1

@@ -1,42 +1,45 @@
 """Output management for constraint adherence evaluation results."""
+
 import json
 import os
 import shutil
 import tempfile
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .evaluation import EvaluationConfig, EvaluationResult, PairedComparison
-    from .constraint_runner import RunResult
     from ..statistics.constraint_analysis import ConstraintAnalysis
+    from .constraint_runner import RunResult
+    from .evaluation import EvaluationConfig, EvaluationResult, PairedComparison
 
 
 class PersistenceError(Exception):
     """Raised when results cannot be persisted."""
+
     pass
 
 
 @dataclass
 class RunManifest:
     """Manifest containing run metadata for reproducibility."""
-    run_id: str                        # Timestamp-based ID
-    started_at: str                    # ISO timestamp
-    completed_at: str | None = None    # Filled at end
+
+    run_id: str  # Timestamp-based ID
+    started_at: str  # ISO timestamp
+    completed_at: str | None = None  # Filled at end
     duration_seconds: float | None = None  # Filled at end
-    config_file: str = ""              # Original config filename
+    config_file: str = ""  # Original config filename
     prompts_count: int = 0
     constraints: list[str] = field(default_factory=list)
     models: list[dict] = field(default_factory=list)
     judge_models: list[dict] = field(default_factory=list)
-    total_sdk_calls: int = 0           # Expected count
-    total_judge_calls: int = 0         # Expected count
+    total_sdk_calls: int = 0  # Expected count
+    total_judge_calls: int = 0  # Expected count
     errors: list[str] = field(default_factory=list)
     # Rejudge-specific fields (None for regular runs)
-    run_type: str = "evaluation"       # "evaluation" or "rejudge"
-    source_run_id: str | None = None   # For rejudge: original run ID
+    run_type: str = "evaluation"  # "evaluation" or "rejudge"
+    source_run_id: str | None = None  # For rejudge: original run ID
     source_responses_path: str | None = None  # For rejudge: relative path to responses
     judge_model_override: dict | None = None  # For rejudge: override model config
 
@@ -144,9 +147,7 @@ class RunOutputManager:
             self.judging_dir.mkdir(parents=True, exist_ok=True)
             self.analysis_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
-            raise PersistenceError(
-                f"Cannot create output directory {self.run_dir}: {e}"
-            ) from e
+            raise PersistenceError(f"Cannot create output directory {self.run_dir}: {e}") from e
 
         # Validate we can actually write to the directory
         self.validate_writable()
@@ -155,18 +156,14 @@ class RunOutputManager:
         try:
             self._copy_configs()
         except OSError as e:
-            raise PersistenceError(
-                f"Cannot copy config files to {self.config_dir}: {e}"
-            ) from e
+            raise PersistenceError(f"Cannot copy config files to {self.config_dir}: {e}") from e
 
         # Create initial manifest
         self._manifest = self._create_manifest(prompts_count)
         try:
             self._write_manifest()
         except OSError as e:
-            raise PersistenceError(
-                f"Cannot write manifest to {self.manifest_path}: {e}"
-            ) from e
+            raise PersistenceError(f"Cannot write manifest to {self.manifest_path}: {e}") from e
 
     def validate_writable(self) -> None:
         """Write and delete a test file to verify permissions.
@@ -179,9 +176,7 @@ class RunOutputManager:
             test_file.write_text("test")
             test_file.unlink()
         except Exception as e:
-            raise PersistenceError(
-                f"Cannot write to {self.run_dir}: {e}"
-            ) from e
+            raise PersistenceError(f"Cannot write to {self.run_dir}: {e}") from e
 
     def finalize(self, errors: list[str] | None = None) -> None:
         """Update manifest with completion time and errors.
@@ -296,7 +291,9 @@ class RunOutputManager:
                 "test": test_scores,
             },
             "judge_model": judge_model,
-            "judge_raw_response": comparison.judging_result.raw_response if include_judge_responses else None,
+            "judge_raw_response": comparison.judging_result.raw_response
+            if include_judge_responses
+            else None,
             "timestamp": timestamp,
         }
 
@@ -381,13 +378,15 @@ class RunOutputManager:
                 if trait in test_scores:
                     deltas[trait] = test_scores[trait] - baseline_scores[trait]
 
-            comparisons_data["comparisons"].append({
-                "prompt_id": comp.prompt_id,
-                "test_constraint": comp.test_constraint,
-                "baseline_scores": baseline_scores,
-                "test_scores": test_scores,
-                "deltas": deltas,
-            })
+            comparisons_data["comparisons"].append(
+                {
+                    "prompt_id": comp.prompt_id,
+                    "test_constraint": comp.test_constraint,
+                    "baseline_scores": baseline_scores,
+                    "test_scores": test_scores,
+                    "deltas": deltas,
+                }
+            )
 
         # Write both files atomically
         self._write_analysis_file("summary.json", summary_data)
@@ -424,9 +423,7 @@ class RunOutputManager:
                     os.unlink(temp_path)
                 raise
         except Exception as e:
-            raise PersistenceError(
-                f"Cannot save to {dest_path}: {e}"
-            ) from e
+            raise PersistenceError(f"Cannot save to {dest_path}: {e}") from e
 
     def _write_analysis_file(self, filename: str, data: dict) -> None:
         """Write an analysis file atomically.

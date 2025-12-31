@@ -1,4 +1,5 @@
 """CTN Testing CLI."""
+
 import os
 import subprocess
 import sys
@@ -43,7 +44,7 @@ def browse(results_dir: str, port: int, no_browser: bool):
         click.echo(f"Error: Browser app not found at {app_path}", err=True)
         sys.exit(1)
 
-    click.echo(f"Starting CTN Results Browser...")
+    click.echo("Starting CTN Results Browser...")
     click.echo(f"  Results dir: {results_dir}")
     click.echo(f"  Port: {port}")
     click.echo()
@@ -59,9 +60,13 @@ def browse(results_dir: str, port: int, no_browser: bool):
 
     # Build streamlit command
     cmd = [
-        sys.executable, "-m", "streamlit", "run",
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
         str(app_path),
-        "--server.port", str(port),
+        "--server.port",
+        str(port),
     ]
 
     if no_browser:
@@ -105,8 +110,12 @@ def run(config_path: str, sdk_url: str | None, seed: int | None):
             random_seed=seed,
         )
 
-        def progress_callback(stage: str, current: int, total: int, success: bool = True, error_msg: str | None = None):
-            status = click.style("[ok]", fg="green") if success else click.style("[error]", fg="red")
+        def progress_callback(
+            stage: str, current: int, total: int, success: bool = True, error_msg: str | None = None
+        ):
+            status = (
+                click.style("[ok]", fg="green") if success else click.style("[error]", fg="red")
+            )
             click.echo(f"\r{stage}: {current}/{total} {status}", nl=False)
             if current == total:
                 click.echo()
@@ -114,7 +123,9 @@ def run(config_path: str, sdk_url: str | None, seed: int | None):
         result = evaluator.run(progress_callback=progress_callback)
 
         click.echo()
-        click.echo(f"Completed: {len(result.run_results)} responses, {len(result.comparisons)} comparisons")
+        click.echo(
+            f"Completed: {len(result.run_results)} responses, {len(result.comparisons)} comparisons"
+        )
 
         if result.run_dir:
             click.echo(f"Results saved to: {result.run_dir}")
@@ -139,8 +150,9 @@ def list(results_dir: str, fmt: str):
 
         ctn-test list ./results --format json
     """
-    from .browser.data import list_runs
     import json
+
+    from .browser.data import list_runs
 
     runs = list_runs(Path(results_dir))
 
@@ -183,7 +195,7 @@ def analyze(run_path: str):
         ctn-test analyze domains/constraint_adherence/results/2024-01-15T10-30-00
     """
     from .runners.evaluation import EvaluationResult
-    from .statistics.constraint_analysis import full_analysis, format_report
+    from .statistics.constraint_analysis import format_report, full_analysis
 
     try:
         result = EvaluationResult.load(Path(run_path))

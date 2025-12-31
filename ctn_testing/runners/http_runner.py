@@ -1,4 +1,5 @@
 """HTTP runner for CTN SDK server integration."""
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -8,32 +9,36 @@ import requests
 @dataclass
 class DryRunInfo:
     """Dry-run response showing what would be sent to the model."""
-    kernel: str                           # The kernel/system prompt
-    system_prompt: str                    # Full system prompt sent
-    user_prompt: str                      # User message sent
+
+    kernel: str  # The kernel/system prompt
+    system_prompt: str  # Full system prompt sent
+    user_prompt: str  # User message sent
     parameters: dict[str, Any] = field(default_factory=dict)  # Model parameters
 
 
 @dataclass
 class SDKResponse:
     """Response from SDK /send endpoint."""
+
     output: str
     provider: str
     model: str
     tokens: dict[str, int]  # {"input": N, "output": M}
-    kernel: str = ""        # Kernel used for this response
+    kernel: str = ""  # Kernel used for this response
 
 
 @dataclass
 class CombinedResponse:
     """Combined dry-run and actual response."""
+
     dry_run: DryRunInfo
     response: SDKResponse
-    kernel_match: bool      # Invariant: dry_run.kernel == response.kernel
+    kernel_match: bool  # Invariant: dry_run.kernel == response.kernel
 
 
 class SDKError(Exception):
     """Error from SDK server."""
+
     def __init__(self, message: str, status_code: int | None = None):
         super().__init__(message)
         self.status_code = status_code
@@ -127,7 +132,7 @@ class SDKRunner:
             "input": input,
             "provider": provider,
             "strategy": effective_strategy,
-            "dry_run": dry_run,
+            "dryRun": dry_run,  # SDK expects camelCase
         }
 
         if model is not None:
@@ -143,11 +148,12 @@ class SDKRunner:
             data = response.json()
 
             if dry_run:
-                # Parse dry-run response format
+                # Parse dry-run response format (SDK returns camelCase)
+                system_prompt = data.get("systemPrompt", "")
                 return DryRunInfo(
-                    kernel=data.get("kernel", ""),
-                    system_prompt=data.get("systemPrompt", data.get("system_prompt", "")),
-                    user_prompt=data.get("userPrompt", data.get("user_prompt", "")),
+                    kernel=system_prompt,  # SDK puts kernel in systemPrompt
+                    system_prompt=system_prompt,
+                    user_prompt=data.get("userPrompt", ""),
                     parameters=data.get("parameters", {}),
                 )
 

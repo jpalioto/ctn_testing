@@ -1,13 +1,12 @@
 """Tests for result persistence - ensuring no data loss through serialization."""
+
 import json
 import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pytest
-
-from ctn_testing.runners.results import FieldResult, DocumentResult, RunResults
+from ctn_testing.runners.results import DocumentResult, FieldResult, RunResults
 
 
 def make_field_result(
@@ -31,7 +30,7 @@ def make_field_result(
 
 class TestFieldResultPersistence:
     """Tests for FieldResult serialization."""
-    
+
     def test_to_dict_all_fields_present(self):
         """Every dataclass field must appear in dict output."""
         field = make_field_result(
@@ -42,7 +41,7 @@ class TestFieldResultPersistence:
             scores={"exact": 1.0, "semantic": 1.0, "usable": 1.0, "complete": 0.8},
         )
         d = field.to_dict()
-        
+
         assert d["field"] == "invoice_number"
         assert d["extracted"] == "INV-001"
         assert d["expected"] == "INV-001"
@@ -51,7 +50,7 @@ class TestFieldResultPersistence:
         assert d["scores"]["semantic"] == 1.0
         assert d["scores"]["usable"] == 1.0
         assert d["scores"]["complete"] == 0.8
-    
+
     def test_field_result_from_dict_roundtrip(self):
         """FieldResult.from_dict must reconstruct equivalent object."""
         original = make_field_result(
@@ -61,16 +60,16 @@ class TestFieldResultPersistence:
             composite_score=0.97,
             scores={"exact": 1.0, "semantic": 1.0, "usable": 0.9, "complete": 1.0},
         )
-        
+
         d = original.to_dict()
         restored = FieldResult.from_dict(d)
-        
+
         assert restored.field_name == original.field_name
         assert restored.extracted_value == original.extracted_value
         assert restored.expected_value == original.expected_value
         assert restored.composite_score == original.composite_score
         assert restored.scores == original.scores
-    
+
     def test_null_values_preserved(self):
         """Null values must serialize as null, not be dropped."""
         field = make_field_result(
@@ -80,17 +79,17 @@ class TestFieldResultPersistence:
             composite_score=0.0,
             scores={"exact": 0.0, "semantic": 0.0, "usable": 0.0, "complete": 0.0},
         )
-        
+
         d = field.to_dict()
         assert d["extracted"] is None
         assert d["expected"] is None
-        
+
         # JSON roundtrip
         json_str = json.dumps(d)
         restored_d = json.loads(json_str)
         assert restored_d["extracted"] is None
         assert restored_d["expected"] is None
-    
+
     def test_unicode_preserved(self):
         """Unicode strings must survive serialization."""
         field = make_field_result(
@@ -100,19 +99,19 @@ class TestFieldResultPersistence:
             composite_score=1.0,
             scores={"exact": 1.0, "semantic": 1.0, "usable": 1.0, "complete": 1.0},
         )
-        
+
         d = field.to_dict()
         json_str = json.dumps(d, ensure_ascii=False)
         restored_d = json.loads(json_str)
         restored = FieldResult.from_dict(restored_d)
-        
+
         assert restored.extracted_value == "株式会社テスト"
         assert restored.expected_value == "株式会社テスト"
 
 
 class TestDocumentResultPersistence:
     """Tests for DocumentResult serialization."""
-    
+
     def test_to_dict_all_fields_present(self):
         """Every dataclass field must appear in dict output."""
         result = DocumentResult(
@@ -142,9 +141,9 @@ class TestDocumentResultPersistence:
             judge_max_tokens=512,
             api_request_id="req_123",
         )
-        
+
         d = result.to_dict()
-        
+
         # Check all keys present
         assert "doc_id" in d
         assert "model" in d
@@ -171,7 +170,7 @@ class TestDocumentResultPersistence:
         assert "judge_temperature" in d
         assert "judge_max_tokens" in d
         assert "api_request_id" in d
-    
+
     def test_error_state_preserved(self):
         """Error state must survive serialization."""
         result = DocumentResult(
@@ -181,12 +180,12 @@ class TestDocumentResultPersistence:
             fields=[],
             error="API timeout after 30s",
         )
-        
+
         d = result.to_dict()
         restored = DocumentResult.from_dict(d)
-        
+
         assert restored.error == "API timeout after 30s"
-    
+
     def test_json_roundtrip(self):
         """JSON serialize -> deserialize must preserve all data."""
         field = make_field_result(
@@ -196,7 +195,7 @@ class TestDocumentResultPersistence:
             composite_score=1.0,
             scores={"exact": 1.0, "semantic": 1.0, "usable": 1.0, "complete": 1.0},
         )
-        
+
         result = DocumentResult(
             doc_id="invoice_001",
             model="claude-sonnet-4-5",
@@ -208,15 +207,15 @@ class TestDocumentResultPersistence:
             input_tokens=100,
             output_tokens=50,
         )
-        
+
         json_str = json.dumps(result.to_dict())
         restored_d = json.loads(json_str)
         restored = DocumentResult.from_dict(restored_d)
-        
+
         assert restored.doc_id == "invoice_001"
         assert len(restored.fields) == 1
         assert restored.fields[0].extracted_value == 1234.56
-    
+
     def test_from_dict_roundtrip(self):
         """to_dict -> from_dict must reconstruct equivalent object."""
         ts = datetime(2025, 12, 14, 12, 30, 45)
@@ -267,7 +266,7 @@ class TestDocumentResultPersistence:
         assert restored.document_hash == original.document_hash
         assert restored.judge_model == original.judge_model
         assert len(restored.fields) == len(original.fields)
-    
+
     def test_from_dict_handles_missing_optional_fields(self):
         """from_dict must handle missing optional fields gracefully."""
         minimal_dict = {
@@ -276,9 +275,9 @@ class TestDocumentResultPersistence:
             "kernel": "test_kernel",
             "fields": [],
         }
-        
+
         result = DocumentResult.from_dict(minimal_dict)
-        
+
         assert result.doc_id == "test"
         assert result.raw_response is None
         assert result.timestamp is None
@@ -287,7 +286,7 @@ class TestDocumentResultPersistence:
 
 class TestRunResultsPersistence:
     """Tests for RunResults serialization."""
-    
+
     def test_save_creates_expected_structure(self):
         """Save must create proper directory structure."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -340,16 +339,17 @@ class TestRunResultsPersistence:
             assert loaded.run_id == original.run_id
             assert loaded.config_name == original.config_name
             assert len(loaded.results) == 1
-            
+
             # results is dict keyed by (model, kernel, doc_id)
             key = ("test_model", "test_kernel", "doc_001")
             assert key in loaded.results
             assert loaded.results[key].doc_id == "doc_001"
             assert loaded.results[key].fields[0].composite_score == 0.92
 
+
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
-    
+
     def test_empty_string_vs_null(self):
         """Empty string must not be confused with null."""
         result = DocumentResult(
@@ -360,19 +360,19 @@ class TestEdgeCases:
             raw_response="",
             error="",
         )
-        
+
         d = result.to_dict()
         assert d["raw_response"] == ""
         assert d["error"] == ""
-        
+
         restored = DocumentResult.from_dict(d)
         assert restored.raw_response == ""
         assert restored.error == ""
-    
+
     def test_very_long_raw_response(self):
         """Very long strings must not be truncated."""
         long_response = "x" * 100_000
-        
+
         result = DocumentResult(
             doc_id="test",
             model="test",
@@ -380,18 +380,18 @@ class TestEdgeCases:
             fields=[],
             raw_response=long_response,
         )
-        
+
         d = result.to_dict()
         json_str = json.dumps(d)
         restored_d = json.loads(json_str)
         restored = DocumentResult.from_dict(restored_d)
-        
+
         assert len(restored.raw_response) == 100_000
-    
+
     def test_special_characters_in_strings(self):
         """Special characters must be preserved."""
         special = 'Quote: "test"\nTab:\t\nBackslash: \\'
-        
+
         result = DocumentResult(
             doc_id="test",
             model="test",
@@ -399,12 +399,12 @@ class TestEdgeCases:
             fields=[],
             raw_response=special,
         )
-        
+
         json_str = json.dumps(result.to_dict())
         restored = DocumentResult.from_dict(json.loads(json_str))
-        
+
         assert restored.raw_response == special
-    
+
     def test_numeric_precision(self):
         """Float precision must be maintained."""
         field = make_field_result(
@@ -419,14 +419,14 @@ class TestEdgeCases:
                 "complete": 0.111111111,
             },
         )
-        
+
         d = field.to_dict()
         json_str = json.dumps(d)
         restored = FieldResult.from_dict(json.loads(json_str))
-        
+
         assert abs(restored.extracted_value - 0.123456789) < 1e-9
         assert abs(restored.scores["exact"] - 0.333333333) < 1e-9
-    
+
     def test_nested_extracted_value(self):
         """Extracted values can be dicts/lists, must serialize correctly."""
         field = make_field_result(
@@ -441,13 +441,13 @@ class TestEdgeCases:
             ],
             composite_score=1.0,
         )
-        
+
         json_str = json.dumps(field.to_dict())
         restored = FieldResult.from_dict(json.loads(json_str))
-        
+
         assert len(restored.extracted_value) == 2
         assert restored.extracted_value[0]["item"] == "Widget"
-    
+
     def test_hash_fields_roundtrip(self):
         """Hash fields must survive roundtrip."""
         result = DocumentResult(
@@ -462,21 +462,21 @@ class TestEdgeCases:
             model_config_hash="e" * 32,
             judge_config_hash="f" * 32,
         )
-        
+
         d = result.to_dict()
         restored = DocumentResult.from_dict(d)
-        
+
         assert restored.document_hash == "a" * 32
         assert restored.kernel_hash == "b" * 32
         assert restored.gt_hash == "c" * 32
         assert restored.judge_prompt_hash == "d" * 32
         assert restored.model_config_hash == "e" * 32
         assert restored.judge_config_hash == "f" * 32
-    
+
     def test_timestamp_roundtrip(self):
         """Timestamp must survive ISO format roundtrip."""
         ts = datetime(2025, 12, 14, 12, 30, 45, 123456)
-        
+
         result = DocumentResult(
             doc_id="test",
             model="test",
@@ -484,16 +484,16 @@ class TestEdgeCases:
             fields=[],
             timestamp=ts,
         )
-        
+
         d = result.to_dict()
         restored = DocumentResult.from_dict(d)
-        
+
         assert restored.timestamp == ts
 
 
 class TestGroundTruthPersistence:
     """Tests for ground truth persistence in results."""
-    
+
     def test_ground_truth_roundtrip(self):
         """Ground truth survives serialization."""
         gt = {
@@ -520,7 +520,7 @@ class TestGroundTruthPersistence:
                 "notes": "Multiple formats present",
             },
         }
-        
+
         result = DocumentResult(
             doc_id="test_doc",
             model="test_model",
@@ -528,12 +528,12 @@ class TestGroundTruthPersistence:
             fields=[],
             ground_truth=gt,
         )
-        
+
         d = result.to_dict()
         restored = DocumentResult.from_dict(d)
-        
+
         assert restored.ground_truth == gt
-    
+
     def test_ground_truth_null_preserved(self):
         """Null ground truth preserved."""
         result = DocumentResult(
@@ -543,12 +543,12 @@ class TestGroundTruthPersistence:
             fields=[],
             ground_truth=None,
         )
-        
+
         d = result.to_dict()
         restored = DocumentResult.from_dict(d)
-        
+
         assert restored.ground_truth is None
-    
+
     def test_ground_truth_json_roundtrip(self):
         """Ground truth survives JSON serialization."""
         gt = {
@@ -564,7 +564,7 @@ class TestGroundTruthPersistence:
                 "notes": None,
             }
         }
-        
+
         result = DocumentResult(
             doc_id="test_doc",
             model="test_model",
@@ -572,8 +572,8 @@ class TestGroundTruthPersistence:
             fields=[],
             ground_truth=gt,
         )
-        
+
         json_str = json.dumps(result.to_dict())
         restored = DocumentResult.from_dict(json.loads(json_str))
-        
+
         assert restored.ground_truth == gt

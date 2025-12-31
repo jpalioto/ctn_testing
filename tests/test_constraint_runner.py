@@ -1,4 +1,5 @@
 """Tests for constraint runner."""
+
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock
@@ -7,19 +8,18 @@ import pytest
 
 from ctn_testing.runners.constraint_runner import (
     ConstraintConfig,
+    ConstraintRunner,
     PromptConfig,
     RunResult,
-    DryRunData,
-    ConstraintRunner,
-    load_prompts,
     load_constraints,
+    load_prompts,
 )
 from ctn_testing.runners.http_runner import (
-    SDKRunner,
-    SDKResponse,
-    SDKError,
-    DryRunInfo,
     CombinedResponse,
+    DryRunInfo,
+    SDKError,
+    SDKResponse,
+    SDKRunner,
 )
 
 
@@ -71,7 +71,7 @@ prompts:
 @pytest.fixture
 def prompts_file():
     """Create a temporary prompts file."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(SAMPLE_PROMPTS_YAML)
         f.flush()
         yield Path(f.name)
@@ -129,7 +129,7 @@ class TestLoadPrompts:
 
     def test_load_prompts_invalid_format(self):
         """Raise ValueError for invalid YAML structure."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("just a string")
             f.flush()
 
@@ -138,7 +138,7 @@ class TestLoadPrompts:
 
     def test_load_prompts_missing_id(self):
         """Raise ValueError for prompt without id."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("""
 prompts:
   - text: "Missing id"
@@ -151,7 +151,7 @@ prompts:
 
     def test_load_prompts_missing_text(self):
         """Raise ValueError for prompt without text."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("""
 prompts:
   - id: test
@@ -209,22 +209,14 @@ class TestLoadConstraints:
 
     def test_load_constraints_missing_name(self):
         """Raise ValueError for constraint without name."""
-        config = {
-            "constraints": [
-                {"input_prefix": "@test "}
-            ]
-        }
+        config = {"constraints": [{"input_prefix": "@test "}]}
 
         with pytest.raises(ValueError, match="missing required 'name'"):
             load_constraints(config)
 
     def test_load_constraints_default_prefix(self):
         """Default to empty prefix if not specified."""
-        config = {
-            "constraints": [
-                {"name": "baseline"}
-            ]
-        }
+        config = {"constraints": [{"name": "baseline"}]}
 
         constraints = load_constraints(config)
 
@@ -234,9 +226,7 @@ class TestLoadConstraints:
 class TestConstraintRunner:
     """Tests for ConstraintRunner class."""
 
-    def test_run_single_builds_correct_input(
-        self, mock_runner, sample_prompts, sample_constraints
-    ):
+    def test_run_single_builds_correct_input(self, mock_runner, sample_prompts, sample_constraints):
         """run_single builds correct input string with prefix."""
         mock_runner.send_with_dry_run.return_value = make_combined_response()
 
@@ -254,9 +244,7 @@ class TestConstraintRunner:
         call_kwargs = mock_runner.send_with_dry_run.call_args[1]
         assert call_kwargs["input"] == "@analytical Explain recursion"
 
-    def test_run_single_baseline_no_prefix(
-        self, mock_runner, sample_prompts, sample_constraints
-    ):
+    def test_run_single_baseline_no_prefix(self, mock_runner, sample_prompts, sample_constraints):
         """Baseline constraint has empty prefix."""
         mock_runner.send_with_dry_run.return_value = make_combined_response()
 
@@ -272,9 +260,7 @@ class TestConstraintRunner:
         assert call_kwargs["input"] == "Explain recursion"
         assert result.input_sent == "Explain recursion"
 
-    def test_run_single_returns_all_fields(
-        self, mock_runner, sample_prompts, sample_constraints
-    ):
+    def test_run_single_returns_all_fields(self, mock_runner, sample_prompts, sample_constraints):
         """run_single returns RunResult with all fields including dry_run."""
         mock_runner.send_with_dry_run.return_value = make_combined_response(
             output="This is the response",
@@ -309,9 +295,7 @@ class TestConstraintRunner:
         assert result.kernel == "MY_KERNEL"
         assert result.kernel_match is True
 
-    def test_run_single_handles_sdk_error(
-        self, mock_runner, sample_prompts, sample_constraints
-    ):
+    def test_run_single_handles_sdk_error(self, mock_runner, sample_prompts, sample_constraints):
         """run_single stores error in result on SDK failure."""
         mock_runner.send_with_dry_run.side_effect = SDKError("Connection failed")
 

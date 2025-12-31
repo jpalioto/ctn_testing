@@ -1,19 +1,19 @@
 """Tests for data integrity of persisted results."""
+
 import json
-import pytest
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from ctn_testing.runners.output import RunOutputManager, RunManifest
+import pytest
+
+from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
 from ctn_testing.runners.constraint_runner import RunResult
 from ctn_testing.runners.evaluation import (
     EvaluationResult,
     PairedComparison,
 )
-from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+from ctn_testing.runners.output import RunOutputManager
 from ctn_testing.statistics.constraint_analysis import full_analysis
-
 
 # =============================================================================
 # Fixtures
@@ -58,17 +58,19 @@ def sample_run_results():
     for prompt_id in prompts:
         for constraint in constraints:
             prefix = "" if constraint == "baseline" else "@analytical "
-            results.append(RunResult(
-                prompt_id=prompt_id,
-                constraint_name=constraint,
-                input_sent=f"{prefix}What is {prompt_id}?",
-                output=f"Response for {prompt_id} with {constraint}",
-                provider="anthropic",
-                model="sonnet",
-                tokens={"input": 10, "output": 20},
-                timestamp="2025-01-15T10:30:00",
-                error=None,
-            ))
+            results.append(
+                RunResult(
+                    prompt_id=prompt_id,
+                    constraint_name=constraint,
+                    input_sent=f"{prefix}What is {prompt_id}?",
+                    output=f"Response for {prompt_id} with {constraint}",
+                    provider="anthropic",
+                    model="sonnet",
+                    tokens={"input": 10, "output": 20},
+                    timestamp="2025-01-15T10:30:00",
+                    error=None,
+                )
+            )
 
     return results
 
@@ -123,17 +125,19 @@ def sample_comparisons():
             error=None,
         )
 
-        comparisons.append(PairedComparison(
-            prompt_id=prompt_id,
-            prompt_text=f"What is {prompt_id}?",
-            baseline_constraint="baseline",
-            test_constraint="analytical",
-            baseline_response=f"Response for {prompt_id} with baseline",
-            test_response=f"Response for {prompt_id} with analytical",
-            judging_result=judging_result,
-            baseline_was_a=baseline_was_a,
-            error=None,
-        ))
+        comparisons.append(
+            PairedComparison(
+                prompt_id=prompt_id,
+                prompt_text=f"What is {prompt_id}?",
+                baseline_constraint="baseline",
+                test_constraint="analytical",
+                baseline_response=f"Response for {prompt_id} with baseline",
+                test_response=f"Response for {prompt_id} with analytical",
+                judging_result=judging_result,
+                baseline_was_a=baseline_was_a,
+                error=None,
+            )
+        )
 
     return comparisons
 
@@ -414,9 +418,7 @@ class TestRoundTripIntegrity:
         loaded = EvaluationResult.load(populated_run_dir)
 
         # Create lookup for original run results
-        original_by_key = {
-            (r.prompt_id, r.constraint_name): r for r in sample_run_results
-        }
+        original_by_key = {(r.prompt_id, r.constraint_name): r for r in sample_run_results}
 
         for loaded_result in loaded.run_results:
             key = (loaded_result.prompt_id, loaded_result.constraint_name)
@@ -431,9 +433,7 @@ class TestRoundTripIntegrity:
         """Token counts preserved after save/load."""
         loaded = EvaluationResult.load(populated_run_dir)
 
-        original_by_key = {
-            (r.prompt_id, r.constraint_name): r for r in sample_run_results
-        }
+        original_by_key = {(r.prompt_id, r.constraint_name): r for r in sample_run_results}
 
         for loaded_result in loaded.run_results:
             key = (loaded_result.prompt_id, loaded_result.constraint_name)
@@ -505,9 +505,7 @@ class TestConfigHonored:
 
         assert data["output"] is None
 
-    def test_judge_responses_excluded_when_configured(
-        self, tmp_path, sample_comparisons
-    ):
+    def test_judge_responses_excluded_when_configured(self, tmp_path, sample_comparisons):
         """include_judge_responses: false → judge_raw_response is null."""
         # Create config with include_judge_responses=false
         config = MagicMock()

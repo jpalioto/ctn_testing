@@ -1,7 +1,8 @@
 """LLM provider abstraction. Add providers to PROVIDERS dict."""
+
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import os
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,7 @@ class ModelConfig:
     temperature: Sampling temperature, 0.0 = deterministic
     max_tokens: Maximum output tokens
     """
+
     provider: str
     name: str
     api_key_env: str
@@ -53,7 +55,6 @@ class ModelClient(ABC):
 
 
 class AnthropicClient(ModelClient):
-
     def __init__(self, config: ModelConfig):
         super().__init__(config)
         self._client = None
@@ -61,6 +62,7 @@ class AnthropicClient(ModelClient):
     def _get_client(self):
         if self._client is None:
             import anthropic
+
             self._client = anthropic.Anthropic(api_key=self._config.get_api_key())
         return self._client
 
@@ -71,18 +73,19 @@ class AnthropicClient(ModelClient):
             max_tokens=self._config.max_tokens,
             temperature=self._config.temperature,
             system=system,
-            messages=[{"role": "user", "content": user}]
+            messages=[{"role": "user", "content": user}],
         )
         return CompletionResult(
-            text=response.content[0].text if hasattr(response.content[0], 'text') else str(response.content[0]),
+            text=response.content[0].text
+            if hasattr(response.content[0], "text")
+            else str(response.content[0]),
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
-            model=self._config.name
+            model=self._config.name,
         )
 
 
 class GoogleClient(ModelClient):
-
     def __init__(self, config: ModelConfig):
         super().__init__(config)
         self._client = None
@@ -90,6 +93,7 @@ class GoogleClient(ModelClient):
     def _get_client(self):
         if self._client is None:
             from google import genai
+
             self._client = genai.Client(api_key=self._config.get_api_key())
         return self._client
 
@@ -103,18 +107,21 @@ class GoogleClient(ModelClient):
                 "max_output_tokens": self._config.max_tokens,
                 "system_instruction": system,
                 "response_mime_type": "application/json",
-            }
+            },
         )
         return CompletionResult(
             text=response.text or "",
-            input_tokens=(response.usage_metadata.prompt_token_count or 0) if response.usage_metadata else 0,
-            output_tokens=(response.usage_metadata.candidates_token_count or 0) if response.usage_metadata else 0,
-            model=self._config.name
+            input_tokens=(response.usage_metadata.prompt_token_count or 0)
+            if response.usage_metadata
+            else 0,
+            output_tokens=(response.usage_metadata.candidates_token_count or 0)
+            if response.usage_metadata
+            else 0,
+            model=self._config.name,
         )
 
 
 class OpenAIClient(ModelClient):
-
     def __init__(self, config: ModelConfig):
         super().__init__(config)
         self._client = None
@@ -122,6 +129,7 @@ class OpenAIClient(ModelClient):
     def _get_client(self):
         if self._client is None:
             from openai import OpenAI
+
             self._client = OpenAI(api_key=self._config.get_api_key())
         return self._client
 
@@ -131,17 +139,15 @@ class OpenAIClient(ModelClient):
             model=self._config.name,
             max_tokens=self._config.max_tokens,
             temperature=self._config.temperature,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user}
-            ]
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
         )
         return CompletionResult(
             text=response.choices[0].message.content,
             input_tokens=response.usage.prompt_tokens,
             output_tokens=response.usage.completion_tokens,
-            model=self._config.name
+            model=self._config.name,
         )
+
 
 PROVIDERS = {
     "anthropic": AnthropicClient,

@@ -7,12 +7,12 @@ Usage:
     python scripts/run_evaluation.py --config domains/extraction/configs/docile/docile_quick.yaml
     python scripts/run_evaluation.py --config domains/extraction/configs/phase1.yaml --data test --final
 """
+
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
-from ctn_testing.core import DocumentSchema, FieldSchema, EvaluationConfig
-
+from ctn_testing.core import DocumentSchema, EvaluationConfig, FieldSchema
 
 # Default schema - will be loaded from config in future
 DEFAULT_SCHEMA = DocumentSchema(
@@ -22,7 +22,7 @@ DEFAULT_SCHEMA = DocumentSchema(
         FieldSchema(name="total_amount", description="Total amount due including tax"),
         FieldSchema(name="due_date", description="Payment due date"),
         FieldSchema(name="vendor_name", description="Company issuing the invoice"),
-    ]
+    ],
 )
 
 
@@ -50,30 +50,31 @@ def main():
         action="store_true",
         help="Suppress progress output",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Resolve config path
     config_path = args.config.resolve()
     if not config_path.exists():
         print(f"Config not found: {config_path}")
         sys.exit(1)
-    
+
     # Load config
     config = EvaluationConfig.from_yaml(config_path)
-    
+
     # Resolve output directory
     domain_dir = config_path.parent.parent
     output_dir = domain_dir / "results"
-    
+
     # Load documents based on source
     data_dir: Path | None = None
     dataset_name: str
-    
+
     if config.dataset:
         # External dataset specified in config
         if config.dataset.type == "docile":
             from ctn_testing.core.loaders import load_docile
+
             docs = load_docile(
                 config.dataset.path,
                 split=config.dataset.split,
@@ -90,12 +91,13 @@ def main():
         data_dir = domain_dir / "data" / args.data
         if not data_dir.exists():
             print(f"Data directory not found: {data_dir}")
-            print(f"Expected structure:")
+            print("Expected structure:")
             print(f"  {data_dir}/documents/*.json")
             print(f"  {data_dir}/ground_truth/*.yaml")
             sys.exit(1)
-        
+
         from ctn_testing.runners import load_document_set
+
         try:
             docs = load_document_set(data_dir)
         except FileNotFoundError as e:
@@ -105,33 +107,36 @@ def main():
     else:
         print("Error: Either --data or config dataset section required")
         sys.exit(1)
-    
+
     n_docs = len(docs)
-    
+
     # Final run confirmation
     if args.data == "test":
         if not args.final:
             print("TEST set requires --final flag.")
             print("This is a one-time evaluation. Are you sure?")
             sys.exit(1)
-        
+
         response = input("Running FINAL TEST evaluation. Type 'yes' to confirm: ")
         if response.lower() != "yes":
             print("Aborted.")
             sys.exit(0)
-    
+
     # Summary
     matrix_size = len(config.run_matrix())
     total_calls = matrix_size * n_docs
-    
+
     print(f"\nEvaluation: {config.name}")
     print(f"Data: {dataset_name} ({n_docs} documents)")
-    print(f"Matrix: {len(config.models)} models × {len(config.enabled_kernels())} kernels = {matrix_size}")
+    print(
+        f"Matrix: {len(config.models)} models × {len(config.enabled_kernels())} kernels = {matrix_size}"
+    )
     print(f"Total API calls: {total_calls}")
     print()
-    
+
     # Run
     from ctn_testing.runners import run_evaluation
+
     results = run_evaluation(
         config_path=config_path,
         data_dir=data_dir,
@@ -140,7 +145,7 @@ def main():
         documents=docs,
         verbose=not args.quiet,
     )
-    
+
     print(f"\nResults saved to: {output_dir / f'run_{results.run_id}'}")
 
 

@@ -1,6 +1,8 @@
 """Configuration loading and validation."""
+
 from dataclasses import dataclass, field
 from pathlib import Path
+
 import yaml
 
 from .models import ModelConfig
@@ -9,10 +11,11 @@ from .models import ModelConfig
 @dataclass
 class DatasetConfig:
     """External dataset configuration."""
-    type: str                    # "docile", "funsd", etc.
-    path: str                    # Path to dataset
-    split: str = "val"           # Dataset split
-    n: int | None = None         # Limit number of documents
+
+    type: str  # "docile", "funsd", etc.
+    path: str  # Path to dataset
+    split: str = "val"  # Dataset split
+    n: int | None = None  # Limit number of documents
 
 
 @dataclass
@@ -82,12 +85,13 @@ def _parse_model_config(data: dict) -> ModelConfig:
 class EvaluationConfig:
     """
     Full evaluation configuration.
-    
+
     judge_policy: match_provider | full_cross | single
         - match_provider: Judge matches eval model's provider (default)
         - full_cross: Every judge scores every extraction (expensive, slow)
         - single: First judge only
     """
+
     name: str
     version: str
     documents: DocumentConfig
@@ -101,17 +105,17 @@ class EvaluationConfig:
     output: OutputConfig
     judge_policy: str = "match_provider"
     dataset: DatasetConfig | None = None  # External dataset (optional)
-    
+
     @classmethod
     def from_yaml(cls, path: Path) -> "EvaluationConfig":
         with open(path) as f:
             data = yaml.safe_load(f)
-        
+
         # Parse dataset if present
         dataset = None
         if "dataset" in data:
             dataset = DatasetConfig(**data["dataset"])
-        
+
         return cls(
             name=data.get("name", "unnamed"),
             version=data.get("version", "0.1"),
@@ -127,14 +131,10 @@ class EvaluationConfig:
             judge_policy=data.get("judge_policy", "match_provider"),
             dataset=dataset,
         )
-    
+
     def enabled_kernels(self) -> list[KernelConfig]:
         return [k for k in self.kernels if k.enabled]
-    
+
     def run_matrix(self) -> list[tuple[ModelConfig, KernelConfig]]:
         """Cartesian product of models x enabled kernels."""
-        return [
-            (model, kernel)
-            for model in self.models
-            for kernel in self.enabled_kernels()
-        ]
+        return [(model, kernel) for model in self.models for kernel in self.enabled_kernels()]

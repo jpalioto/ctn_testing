@@ -1,15 +1,16 @@
 """Tests for HTTP runner (SDK integration)."""
+
 from unittest.mock import Mock, patch
 
 import pytest
 import requests
 
 from ctn_testing.runners.http_runner import (
-    SDKRunner,
-    SDKResponse,
-    SDKError,
-    DryRunInfo,
     CombinedResponse,
+    DryRunInfo,
+    SDKError,
+    SDKResponse,
+    SDKRunner,
 )
 
 
@@ -57,6 +58,7 @@ class TestHealthCheck:
 
         with patch("ctn_testing.runners.http_runner.requests.get") as mock_get:
             import requests
+
             mock_get.side_effect = requests.exceptions.ConnectionError()
 
             result = runner.health_check()
@@ -69,6 +71,7 @@ class TestHealthCheck:
 
         with patch("ctn_testing.runners.http_runner.requests.get") as mock_get:
             import requests
+
             mock_get.side_effect = requests.exceptions.Timeout()
 
             result = runner.health_check()
@@ -141,13 +144,14 @@ class TestSend:
                 dry_run=True,
             )
 
-            # Verify dry_run was passed in the payload
+            # Verify dryRun was passed in the payload (SDK expects camelCase)
             call_kwargs = mock_post.call_args[1]
-            assert call_kwargs["json"]["dry_run"] is True
+            assert call_kwargs["json"]["dryRun"] is True
 
             # Result should be DryRunInfo, not SDKResponse
             assert isinstance(result, DryRunInfo)
-            assert result.kernel == "CTN_KERNEL_SCHEMA = ..."
+            # SDK returns kernel in systemPrompt field
+            assert result.kernel == "You are a helpful assistant..."
             assert result.system_prompt == "You are a helpful assistant..."
             assert result.user_prompt == "Explain recursion"
             assert result.parameters == {"temperature": 0.7}
@@ -158,6 +162,7 @@ class TestSend:
 
         with patch("ctn_testing.runners.http_runner.requests.post") as mock_post:
             import requests
+
             mock_post.side_effect = requests.exceptions.ConnectionError()
 
             with pytest.raises(SDKError) as exc_info:
@@ -172,6 +177,7 @@ class TestSend:
 
         with patch("ctn_testing.runners.http_runner.requests.post") as mock_post:
             import requests
+
             mock_post.side_effect = requests.exceptions.Timeout()
 
             with pytest.raises(SDKError) as exc_info:
@@ -186,6 +192,7 @@ class TestSend:
 
         with patch("ctn_testing.runners.http_runner.requests.post") as mock_post:
             import requests
+
             mock_response = Mock()
             mock_response.status_code = 400
             mock_response.json.return_value = {"error": "Invalid provider"}
@@ -342,6 +349,7 @@ class TestStats:
 
         with patch("ctn_testing.runners.http_runner.requests.get") as mock_get:
             import requests
+
             mock_get.side_effect = requests.exceptions.ConnectionError()
 
             with pytest.raises(SDKError):
@@ -506,22 +514,22 @@ class TestStrategyParameter:
             assert payload["input"] == "@analytical hello"
             assert payload["provider"] == "anthropic"
             assert payload["strategy"] == "ctn"
-            assert payload["dry_run"] is False
+            assert payload["dryRun"] is False
 
 
 class TestSendWithDryRun:
     """Tests for combined dry-run + actual response."""
 
     def test_dry_run_returns_kernel_structure(self):
-        """Dry-run returns DryRunInfo with kernel, system_prompt, user_prompt."""
+        """Dry-run returns DryRunInfo with kernel from systemPrompt."""
         runner = SDKRunner()
 
         with patch("ctn_testing.runners.http_runner.requests.post") as mock_post:
             mock_response = Mock()
             mock_response.status_code = 200
+            # SDK returns kernel content in systemPrompt field
             mock_response.json.return_value = {
-                "kernel": "CTN_KERNEL v1.0\nΣ(constraints)",
-                "systemPrompt": "You are a helpful assistant with τ timing.",
+                "systemPrompt": "CTN_KERNEL v1.0\nΣ(constraints) τ timing",
                 "userPrompt": "Explain recursion Ψ",
                 "parameters": {"temperature": 0.7, "max_tokens": 1000},
             }
@@ -531,8 +539,9 @@ class TestSendWithDryRun:
             result = runner.send(input="@analytical hello", dry_run=True)
 
             assert isinstance(result, DryRunInfo)
-            assert result.kernel == "CTN_KERNEL v1.0\nΣ(constraints)"
-            assert result.system_prompt == "You are a helpful assistant with τ timing."
+            # kernel and system_prompt both come from systemPrompt
+            assert result.kernel == "CTN_KERNEL v1.0\nΣ(constraints) τ timing"
+            assert result.system_prompt == "CTN_KERNEL v1.0\nΣ(constraints) τ timing"
             assert result.user_prompt == "Explain recursion Ψ"
             assert result.parameters == {"temperature": 0.7, "max_tokens": 1000}
 
@@ -575,10 +584,10 @@ class TestSendWithDryRun:
             mock_response.raise_for_status = Mock()
 
             # First call is dry-run
-            if kwargs["json"]["dry_run"]:
+            if kwargs["json"]["dryRun"]:
+                # SDK returns kernel in systemPrompt field
                 mock_response.json.return_value = {
-                    "kernel": "KERNEL_ABC",
-                    "systemPrompt": "System prompt",
+                    "systemPrompt": "KERNEL_ABC",
                     "userPrompt": "User prompt",
                     "parameters": {"temperature": 0.5},
                 }
@@ -603,9 +612,9 @@ class TestSendWithDryRun:
             assert isinstance(result, CombinedResponse)
             assert call_count[0] == 2
 
-            # Check dry_run info
+            # Check dry_run info (kernel comes from systemPrompt)
             assert result.dry_run.kernel == "KERNEL_ABC"
-            assert result.dry_run.system_prompt == "System prompt"
+            assert result.dry_run.system_prompt == "KERNEL_ABC"
             assert result.dry_run.user_prompt == "User prompt"
 
             # Check actual response
@@ -621,10 +630,10 @@ class TestSendWithDryRun:
             mock_response.status_code = 200
             mock_response.raise_for_status = Mock()
 
-            if kwargs["json"]["dry_run"]:
+            if kwargs["json"]["dryRun"]:
+                # SDK returns kernel in systemPrompt field
                 mock_response.json.return_value = {
-                    "kernel": "IDENTICAL_KERNEL_Σ",
-                    "systemPrompt": "Prompt",
+                    "systemPrompt": "IDENTICAL_KERNEL_Σ",
                     "userPrompt": "User",
                     "parameters": {},
                 }
@@ -654,10 +663,10 @@ class TestSendWithDryRun:
             mock_response.status_code = 200
             mock_response.raise_for_status = Mock()
 
-            if kwargs["json"]["dry_run"]:
+            if kwargs["json"]["dryRun"]:
+                # SDK returns kernel in systemPrompt field
                 mock_response.json.return_value = {
-                    "kernel": "KERNEL_V1",
-                    "systemPrompt": "Prompt",
+                    "systemPrompt": "KERNEL_V1",
                     "userPrompt": "User",
                     "parameters": {},
                 }
@@ -732,10 +741,10 @@ class TestSendWithDryRun:
             mock_response.status_code = 200
             mock_response.raise_for_status = Mock()
 
-            if kwargs["json"]["dry_run"]:
+            if kwargs["json"]["dryRun"]:
+                # SDK returns kernel in systemPrompt field
                 mock_response.json.return_value = {
-                    "kernel": greek_kernel,
-                    "systemPrompt": "System with Σ",
+                    "systemPrompt": greek_kernel,
                     "userPrompt": "User with Ψ",
                     "parameters": {},
                 }

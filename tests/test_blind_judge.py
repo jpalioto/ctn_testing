@@ -1,20 +1,20 @@
 """Tests for blind judging infrastructure."""
+
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
-from ctn_testing.judging.traits import TraitDimension, TraitDefinitions, load_traits
 from ctn_testing.judging.blind_judge import (
-    TraitScore,
-    JudgingResult,
     BlindJudge,
     JudgingError,
+    JudgingResult,
+    TraitScore,
 )
-from ctn_testing.runners.http_runner import SDKRunner, SDKResponse, SDKError
-
+from ctn_testing.judging.traits import TraitDefinitions, TraitDimension, load_traits
+from ctn_testing.runners.http_runner import SDKError, SDKResponse, SDKRunner
 
 # Sample traits YAML content
 SAMPLE_TRAITS_YAML = """
@@ -42,7 +42,7 @@ dimensions:
 @pytest.fixture
 def traits_file():
     """Create a temporary traits file."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(SAMPLE_TRAITS_YAML)
         f.flush()
         yield Path(f.name)
@@ -142,7 +142,7 @@ class TestLoadTraits:
 
     def test_load_traits_invalid_format(self):
         """Raise ValueError for invalid YAML structure."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("just a string, not a dict")
             f.flush()
 
@@ -151,7 +151,7 @@ class TestLoadTraits:
 
     def test_load_traits_missing_dimension_name(self):
         """Raise ValueError for dimension without name."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("""
 version: "1.0"
 dimensions:
@@ -230,16 +230,18 @@ class TestBlindJudge:
         """Parse valid JSON response into JudgingResult."""
         judge = BlindJudge(traits_file, mock_runner)
 
-        raw_response = json.dumps({
-            "response_a": {
-                "reasoning_depth": {"score": 75, "reasons": ["Good logic", "Clear steps"]},
-                "conciseness": {"score": 60, "reasons": ["Slightly verbose"]},
-            },
-            "response_b": {
-                "reasoning_depth": {"score": 40, "reasons": ["Weak reasoning"]},
-                "conciseness": {"score": 85, "reasons": ["Very concise"]},
-            },
-        })
+        raw_response = json.dumps(
+            {
+                "response_a": {
+                    "reasoning_depth": {"score": 75, "reasons": ["Good logic", "Clear steps"]},
+                    "conciseness": {"score": 60, "reasons": ["Slightly verbose"]},
+                },
+                "response_b": {
+                    "reasoning_depth": {"score": 40, "reasons": ["Weak reasoning"]},
+                    "conciseness": {"score": 85, "reasons": ["Very concise"]},
+                },
+            }
+        )
 
         result = judge._parse_response(raw_response)
 
@@ -253,7 +255,7 @@ class TestBlindJudge:
         """Parse JSON wrapped in markdown code block."""
         judge = BlindJudge(traits_file, mock_runner)
 
-        raw_response = '''Here's my evaluation:
+        raw_response = """Here's my evaluation:
 
 ```json
 {
@@ -267,7 +269,7 @@ class TestBlindJudge:
   }
 }
 ```
-'''
+"""
 
         result = judge._parse_response(raw_response)
 
@@ -291,14 +293,16 @@ class TestBlindJudge:
         judge = BlindJudge(traits_file, mock_runner)
 
         # Only has reasoning_depth, missing conciseness
-        raw_response = json.dumps({
-            "response_a": {
-                "reasoning_depth": {"score": 75, "reasons": ["Good"]},
-            },
-            "response_b": {
-                "reasoning_depth": {"score": 40, "reasons": ["Weak"]},
-            },
-        })
+        raw_response = json.dumps(
+            {
+                "response_a": {
+                    "reasoning_depth": {"score": 75, "reasons": ["Good"]},
+                },
+                "response_b": {
+                    "reasoning_depth": {"score": 40, "reasons": ["Weak"]},
+                },
+            }
+        )
 
         result = judge._parse_response(raw_response)
 
@@ -310,16 +314,18 @@ class TestBlindJudge:
         """Handle scores provided as plain numbers."""
         judge = BlindJudge(traits_file, mock_runner)
 
-        raw_response = json.dumps({
-            "response_a": {
-                "reasoning_depth": 75,  # Just a number
-                "conciseness": 60,
-            },
-            "response_b": {
-                "reasoning_depth": 40,
-                "conciseness": 85,
-            },
-        })
+        raw_response = json.dumps(
+            {
+                "response_a": {
+                    "reasoning_depth": 75,  # Just a number
+                    "conciseness": 60,
+                },
+                "response_b": {
+                    "reasoning_depth": 40,
+                    "conciseness": 85,
+                },
+            }
+        )
 
         result = judge._parse_response(raw_response)
 
@@ -330,16 +336,18 @@ class TestBlindJudge:
         """Scores are clamped to 0-100 range."""
         judge = BlindJudge(traits_file, mock_runner)
 
-        raw_response = json.dumps({
-            "response_a": {
-                "reasoning_depth": {"score": 150, "reasons": []},
-                "conciseness": {"score": -10, "reasons": []},
-            },
-            "response_b": {
-                "reasoning_depth": {"score": 50, "reasons": []},
-                "conciseness": {"score": 50, "reasons": []},
-            },
-        })
+        raw_response = json.dumps(
+            {
+                "response_a": {
+                    "reasoning_depth": {"score": 150, "reasons": []},
+                    "conciseness": {"score": -10, "reasons": []},
+                },
+                "response_b": {
+                    "reasoning_depth": {"score": 50, "reasons": []},
+                    "conciseness": {"score": 50, "reasons": []},
+                },
+            }
+        )
 
         result = judge._parse_response(raw_response)
 
@@ -367,10 +375,12 @@ class TestBlindJudge:
         )
 
         mock_runner.send.return_value = SDKResponse(
-            output=json.dumps({
-                "response_a": {"reasoning_depth": 50, "conciseness": 50},
-                "response_b": {"reasoning_depth": 50, "conciseness": 50},
-            }),
+            output=json.dumps(
+                {
+                    "response_a": {"reasoning_depth": 50, "conciseness": 50},
+                    "response_b": {"reasoning_depth": 50, "conciseness": 50},
+                }
+            ),
             provider="anthropic",
             model="claude-sonnet-4",
             tokens={"input": 100, "output": 50},

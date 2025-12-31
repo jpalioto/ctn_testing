@@ -1,15 +1,17 @@
 """Judge module for evaluating extractions."""
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from ..core import ModelConfig
-from ..core import GroundTruth
+from typing import Any
+
+from pydantic import BaseModel, field_validator
+
+from ..core import GroundTruth, ModelConfig
 from ..utils.logger import get_logger
 from ..utils.network import make_client
-from .results import FieldResult
-from pydantic import BaseModel, field_validator
-from typing import Any
 from .kernel import RenderedPrompt
+from .results import FieldResult
 
 
 @dataclass
@@ -27,10 +29,11 @@ class JudgeVerdict(BaseModel):
     usable: bool = False
     complete: bool = False
 
+
 class JudgeResponse(BaseModel):
     verdicts: list[JudgeVerdict]
-    
-    @field_validator('verdicts', mode='before')
+
+    @field_validator("verdicts", mode="before")
     @classmethod
     def normalize_input(cls, v):
         if isinstance(v, list):
@@ -61,15 +64,15 @@ def judge_extraction(
 ) -> JudgeResult:
     """Have judge model evaluate extraction quality."""
     log = get_logger()
-    
+
     # Load system and user prompts
-    base_path = judge_prompt_path.with_suffix('')
+    base_path = judge_prompt_path.with_suffix("")
     system_path = Path(str(base_path) + "_system.txt")
     user_path = Path(str(base_path) + "_user.txt")
-    
+
     system_prompt = load_judge_prompt(system_path)
     user_template = load_judge_prompt(user_path)
-    
+
     # Format ground truth
     gt_formatted = {}
     for name, gt in ground_truth.items():
@@ -80,14 +83,14 @@ def judge_extraction(
             "exists": gt.exists_in_document,
             "ambiguous": gt.is_ambiguous,
         }
-    
+
     user_prompt = user_template.format(
         ground_truth=json.dumps(gt_formatted, indent=2),
         candidate=raw_response,
     )
-    
+
     log.debug("Judge prompt constructed", data={"prompt_length": len(user_prompt)})
-    
+
     prompt = RenderedPrompt(
         system=system_prompt,
         user=user_prompt,
@@ -99,9 +102,12 @@ def judge_extraction(
     complete = make_client(judge_model)
     result = complete(prompt)
     raw_judge_response = result.text
-    
-    log.debug("Judge raw response", data=raw_judge_response[:500] if len(raw_judge_response) > 500 else raw_judge_response)
-    
+
+    log.debug(
+        "Judge raw response",
+        data=raw_judge_response[:500] if len(raw_judge_response) > 500 else raw_judge_response,
+    )
+
     # Strip markdown fences
     text = raw_judge_response.strip()
     if text.startswith("```"):
@@ -114,7 +120,7 @@ def judge_extraction(
                 break
         text = "\n".join(lines[start_idx:end_idx])
         log.debug("Stripped code fences", data={"start": start_idx, "end": end_idx})
-    
+
     # Parse response
     try:
         raw = json.loads(text)
@@ -127,45 +133,47 @@ def judge_extraction(
             context={
                 "raw_text_preview": text[:500],
                 "raw_text_length": len(text),
-            }
+            },
         )
         return JudgeResult(fields=[], raw_response=raw_judge_response, outcome=f"ERROR: {e}")
-    
+
     log.debug("Parsed verdicts", data={"count": len(verdicts)})
-    
-   # Convert to FieldResults
+
+    # Convert to FieldResults
     field_results = []
     for v in verdicts:
         field_name = v.field
         if not field_name:
             log.warn("Verdict missing field name", data=v)
             continue
-            
+
         gt = ground_truth.get(field_name)
-        
+
         scores = {
             "exact": 1.0 if v.exact_match else 0.0,
             "semantic": 1.0 if v.semantic_match else 0.0,
             "usable": 1.0 if v.usable else 0.0,
             "complete": 1.0 if v.complete else 0.0,
         }
-        
+
         # Composite: semantic-heavy weighting
         composite = (
-            0.10 * scores["exact"] +
-            0.40 * scores["semantic"] +
-            0.30 * scores["usable"] +
-            0.20 * scores["complete"]
+            0.10 * scores["exact"]
+            + 0.40 * scores["semantic"]
+            + 0.30 * scores["usable"]
+            + 0.20 * scores["complete"]
         )
-        
-        field_results.append(FieldResult(
-            field_name=field_name,
-            extracted_value=v.extracted,
-            expected_value=gt.value if gt else None,
-            composite_score=composite,
-            scores=scores,
-        ))
-    
+
+        field_results.append(
+            FieldResult(
+                field_name=field_name,
+                extracted_value=v.extracted,
+                expected_value=gt.value if gt else None,
+                composite_score=composite,
+                scores=scores,
+            )
+        )
+
     log.debug("Built field results", data={"count": len(field_results)})
-    
+
     return JudgeResult(fields=field_results, raw_response=raw_judge_response, outcome="OK")

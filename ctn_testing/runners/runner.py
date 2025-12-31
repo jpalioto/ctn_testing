@@ -1,62 +1,61 @@
 """Main evaluation runner."""
+
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from datetime import datetime
 
 from ..core import (
+    DocumentSchema,
+    DocumentWithGroundTruth,
     EvaluationConfig,
     ModelConfig,
-    DocumentSchema,
 )
-from ..utils.network import make_client
-
-from ..metrics import composite_score
-from .kernel import Kernel, NullBaseline, load_kernel
-from .results import RunResults, DocumentResult, FieldResult
-from .judge import judge_extraction, JudgeResult
-from ..utils.hashing import md5_hash, hash_config
-
-from ..core import DocumentWithGroundTruth
 from ..core.loaders import load_document_set
-from ..utils.hashing import hash_file
-from .kernel import Kernel, NullBaseline, RenderedPrompt
+from ..metrics import composite_score
+from ..utils.hashing import hash_config, hash_file, md5_hash
+from ..utils.network import make_client
+from .judge import JudgeResult, judge_extraction
+from .kernel import Kernel, NullBaseline, RenderedPrompt, load_kernel
+from .results import DocumentResult, FieldResult, RunResults
 
 # Zero-width characters for cache busting (invisible, deterministic)
-ZW_CHARS = ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff']
-ZW_NAMES = ['ZWSP', 'ZWNJ', 'ZWJ', 'WJ', 'BOM']
+ZW_CHARS = ["\u200b", "\u200c", "\u200d", "\u2060", "\ufeff"]
+ZW_NAMES = ["ZWSP", "ZWNJ", "ZWJ", "WJ", "BOM"]
 
 
 @dataclass
 class RunConfig:
     """Runtime configuration for a run."""
+
     config: EvaluationConfig
-    domain_dir: Path          
+    domain_dir: Path
     data_dir: Path | None
     output_dir: Path
     schema: DocumentSchema
     verbose: bool = True
 
+
 @dataclass
 class ExtractionContext:
     """Immutable context for a single extraction attempt.
-    
+
     Pre-computes hashes and metadata so _extract_single stays focused
     on the actual extraction logic.
     """
+
     doc: DocumentWithGroundTruth
     model: ModelConfig
     kernel: Kernel
     timestamp: datetime
-    
+
     # Pre-computed hashes
     document_hash: str | None
     kernel_hash: str | None
     gt_hash: str
     model_config_hash: str
-    
+
     # Cache prefix (for Gemini cache-busting)
     cache_prefix: str
     cache_prefix_char: str
@@ -129,7 +128,7 @@ class Runner:
         kernel: Kernel,
     ) -> ExtractionContext:
         """Build immutable context for extraction.
-        
+
         Handles hashing for both text-mode and file-mode documents.
         """
         # Hash document content
@@ -139,16 +138,16 @@ class Runner:
             doc_hash = hash_file(str(doc.document.file_path))
         else:
             doc_hash = None
-        
+
         # Hash kernel template
         kernel_hash = None
-        if hasattr(kernel, 'raw_content') and kernel.raw_content:
+        if hasattr(kernel, "raw_content") and kernel.raw_content:
             kernel_hash = md5_hash(kernel.raw_content)
-        
+
         # Cache prefix rotation
         prefix_idx = self._test_index % len(ZW_CHARS)
         self._test_index += 1
-        
+
         return ExtractionContext(
             doc=doc,
             model=model,
@@ -161,7 +160,7 @@ class Runner:
             cache_prefix=ZW_NAMES[prefix_idx],
             cache_prefix_char=ZW_CHARS[prefix_idx],
         )
-    
+
     def _build_result(
         self,
         ctx: ExtractionContext,
@@ -173,13 +172,11 @@ class Runner:
         error: str | None = None,
     ) -> DocumentResult:
         """Build DocumentResult from context.
-        
+
         Single place to construct results ensures consistency.
         """
 
-        gt_serialized = {
-            name: gt.to_dict() for name, gt in ctx.doc.ground_truth.items()
-        }
+        gt_serialized = {name: gt.to_dict() for name, gt in ctx.doc.ground_truth.items()}
 
         return DocumentResult(
             doc_id=ctx.doc.document.id,
@@ -201,46 +198,48 @@ class Runner:
             model_temperature=ctx.model.temperature,
             model_max_tokens=ctx.model.max_tokens,
         )
-    
+
     def _extract_null_baseline(self, ctx: ExtractionContext) -> DocumentResult:
         """Handle null baseline extraction (no API call).
-        
+
         Null baseline returns empty extractions for all fields,
         useful for testing scoring logic.
         """
         kernel = ctx.kernel
         if not isinstance(kernel, NullBaseline):
             raise ValueError("Expected NullBaseline kernel")
-        
+
         extractions = kernel.extract_directly()
         fields: list[FieldResult] = []
-        
+
         # Provide defaults for optional document fields
         doc_text = ctx.doc.document.text or ""
         doc_pages = ctx.doc.document.pages or []
-        
+
         for ext in extractions:
             gt = ctx.doc.ground_truth.get(ext.field_name)
             if not gt:
                 continue
-            
+
             score = composite_score(ext, gt, doc_text, doc_pages)
-            
-            fields.append(FieldResult(
-                field_name=ext.field_name,
-                extracted_value=ext.value,
-                expected_value=gt.value,
-                composite_score=score.composite,
-                scores={
-                    "exact": score.value,
-                    "semantic": score.value,
-                    "usable": score.value,
-                    "complete": score.value,
-                },
-            ))
-        
+
+            fields.append(
+                FieldResult(
+                    field_name=ext.field_name,
+                    extracted_value=ext.value,
+                    expected_value=gt.value,
+                    composite_score=score.composite,
+                    scores={
+                        "exact": score.value,
+                        "semantic": score.value,
+                        "usable": score.value,
+                        "complete": score.value,
+                    },
+                )
+            )
+
         return self._build_result(ctx, fields)
-    
+
     def _extract_single(
         self,
         doc: DocumentWithGroundTruth,
@@ -248,26 +247,26 @@ class Runner:
         kernel: Kernel,
     ) -> DocumentResult:
         """Extract from a single document.
-        
+
         Returns raw response only - scoring happens in judge pass.
         """
         ctx = self._prepare_context(doc, model, kernel)
-        
+
         # Null baseline: no API call needed
         if isinstance(kernel, NullBaseline):
             return self._extract_null_baseline(ctx)
-        
+
         # Validate document has content
         if not doc.document.has_content:
             return self._build_result(
-                ctx, 
-                fields=[], 
+                ctx,
+                fields=[],
                 error="Document has no content (no text or file)",
             )
-        
+
         # Render prompt (now accepts Document, handles text vs file mode)
         prompt = kernel.render(doc.document)
-        
+
         # Apply cache-bust prefix to user message
         salted_prompt = RenderedPrompt(
             system=prompt.system,
@@ -275,18 +274,18 @@ class Runner:
             kernel_name=prompt.kernel_name,
             document=prompt.document,
         )
-        
+
         # Make API call
         client = self._get_client(model)
         start = time.time()
-        
+
         try:
             result = client(salted_prompt)
         except Exception as e:
             return self._build_result(ctx, fields=[], error=str(e))
-        
+
         latency_ms = (time.time() - start) * 1000
-        
+
         return self._build_result(
             ctx,
             fields=[],
@@ -308,9 +307,9 @@ class Runner:
         """Judge a single extraction. Returns scored fields."""
         if not result.raw_response:
             return JudgeResult(fields=[], raw_response="", outcome="ERROR: no raw response")
-        
+
         judge_prompt_path = self._domain_dir / "prompts" / "judge"
-        
+
         field_results = judge_extraction(
             judge_model=judge_model,
             judge_prompt_path=judge_prompt_path,
@@ -343,8 +342,7 @@ class Runner:
         return self._results
 
     def _load_documents(
-        self, 
-        documents: list[DocumentWithGroundTruth] | None
+        self, documents: list[DocumentWithGroundTruth] | None
     ) -> list[DocumentWithGroundTruth]:
         """Load documents from data_dir or use pre-loaded."""
         if documents is None:
@@ -354,7 +352,7 @@ class Runner:
             documents = load_document_set(self._data_dir)
         else:
             self._log(f"Using {len(documents)} pre-loaded documents...")
-        
+
         self._log(f"  Loaded {len(documents)} documents")
         return documents
 
@@ -363,17 +361,21 @@ class Runner:
         matrix = self._config.run_matrix()
         total_runs = len(matrix) * len(documents)
 
-        self._log(f"\n{'='*60}")
+        self._log(f"\n{'=' * 60}")
         self._log("PASS 1: EXTRACTION")
-        self._log(f"{'='*60}")
-        self._log(f"Run matrix: {len(matrix)} model×kernel pairs × {len(documents)} docs = {total_runs} extractions")
+        self._log(f"{'=' * 60}")
+        self._log(
+            f"Run matrix: {len(matrix)} model×kernel pairs × {len(documents)} docs = {total_runs} extractions"
+        )
 
         completed = 0
         for model, kernel_config in matrix:
             kernel = self._get_kernel(kernel_config.name, kernel_config.path)
 
             for doc in documents:
-                self._log(f"  [{completed + 1}/{total_runs}] {model.name} × {kernel.name} × {doc.document.id}")
+                self._log(
+                    f"  [{completed + 1}/{total_runs}] {model.name} × {kernel.name} × {doc.document.id}"
+                )
 
                 result = self._extract_single(doc, model, kernel)
                 self._results.add(result)
@@ -390,13 +392,17 @@ class Runner:
 
     def _run_judging_pass(self, docs_by_id: dict[str, DocumentWithGroundTruth]) -> None:
         """Pass 2: Judge all extractions."""
-        judge_names = [j.name for j in self._config.judge_models] if self._config.judge_models else ["none"]
-        
-        self._log(f"\n{'='*60}")
-        self._log(f"PASS 2: JUDGING (policy={self._config.judge_policy}, judges={judge_names})")
-        self._log(f"{'='*60}")
+        judge_names = (
+            [j.name for j in self._config.judge_models] if self._config.judge_models else ["none"]
+        )
 
-        results_to_judge = [r for r in self._results.results.values() if r.raw_response and not r.error]
+        self._log(f"\n{'=' * 60}")
+        self._log(f"PASS 2: JUDGING (policy={self._config.judge_policy}, judges={judge_names})")
+        self._log(f"{'=' * 60}")
+
+        results_to_judge = [
+            r for r in self._results.results.values() if r.raw_response and not r.error
+        ]
         self._log(f"Judging {len(results_to_judge)} extractions...")
 
         for idx, result in enumerate(results_to_judge):
@@ -414,16 +420,15 @@ class Runner:
         if not doc:
             return
 
-        model_config = next(
-            (m for m in self._config.models if m.name == result.model),
-            None
-        )
+        model_config = next((m for m in self._config.models if m.name == result.model), None)
         if not model_config:
             return
 
         judges = self._get_judges(model_config)
         if not judges:
-            self._log(f"  [{idx + 1}/{total}] {result.model} × {result.kernel} × {result.doc_id}: NO JUDGE")
+            self._log(
+                f"  [{idx + 1}/{total}] {result.model} × {result.kernel} × {result.doc_id}: NO JUDGE"
+            )
             return
 
         self._log(f"  [{idx + 1}/{total}] {result.model} × {result.kernel} × {result.doc_id}")
@@ -432,9 +437,9 @@ class Runner:
             result.fields = []
             result.judge_raw_response = None
             result.judge_outcome = "PENDING"
-            
+
             judge_result = self._judge_single(doc, result, judges[0])
-            
+
             result.fields = judge_result.fields
             result.judge_raw_response = judge_result.raw_response
             result.judge_outcome = judge_result.outcome
@@ -444,18 +449,18 @@ class Runner:
             result.judge_temperature = judges[0].temperature
             result.judge_max_tokens = judges[0].max_tokens
             result.judge_config_hash = hash_config(judges[0])
-        
+
             judge_prompt_path = self._domain_dir / "prompts" / "judge_system.txt"
             if judge_prompt_path.exists():
                 result.judge_prompt_hash = md5_hash(judge_prompt_path.read_text())
-                
+
             if judge_result.outcome == "OK":
                 self._log(f"    Composite: {result.composite_score:.2f}")
             elif judge_result.outcome.startswith("ERROR:"):
                 self._log(f"    {judge_result.outcome}")
             else:
                 raise ValueError(f"Unexpected judge outcome: {judge_result.outcome}")
-                
+
         except Exception as e:
             existing = result.judge_outcome or "PENDING"
             result.judge_outcome = f"ERROR: {existing} | {e}"
@@ -475,15 +480,17 @@ class Runner:
         self._log("\n" + "=" * 60)
         self._log("SUMMARY")
         self._log("=" * 60)
-        
+
         summary = self._results.summary()
-        
+
         for key, stats in summary.get("by_model_kernel", {}).items():
             model, kernel = key.split("|")
             self._log(f"{model} × {kernel}:")
-            self._log(f"  Composite: {stats['composite_mean']:.3f} (min={stats['composite_min']:.2f}, max={stats['composite_max']:.2f})")
+            self._log(
+                f"  Composite: {stats['composite_mean']:.3f} (min={stats['composite_min']:.2f}, max={stats['composite_max']:.2f})"
+            )
             self._log(f"  Value:     {stats['value_mean']:.3f}")
-            if stats['errors'] > 0:
+            if stats["errors"] > 0:
                 self._log(f"  Errors:    {stats['errors']}")
 
         if summary.get("comparisons"):
@@ -492,7 +499,9 @@ class Runner:
             for comp_key, comp in summary["comparisons"].items():
                 model = comp_key.split("|")[0]
                 self._log(f"  {model}:")
-                self._log(f"    Delta = {comp['mean_diff']:+.3f} ({comp['effect_interpretation']} effect)")
+                self._log(
+                    f"    Delta = {comp['mean_diff']:+.3f} ({comp['effect_interpretation']} effect)"
+                )
                 self._log(f"    p = {comp['p_value']:.3f}, n = {comp['n']}")
 
 
@@ -505,7 +514,7 @@ def run_evaluation(
     verbose: bool = True,
 ) -> RunResults:
     """Convenience function to run an evaluation.
-    
+
     Args:
         config_path: Path to config YAML
         data_dir: Path to data directory (optional if config has dataset)
@@ -519,6 +528,7 @@ def run_evaluation(
         if config.dataset:
             if config.dataset.type == "docile":
                 from ..core.loaders import load_docile
+
                 documents = load_docile(
                     config.dataset.path,
                     split=config.dataset.split,
@@ -530,7 +540,7 @@ def run_evaluation(
             documents = load_document_set(data_dir)
         else:
             raise ValueError("Either data_dir or config.dataset required")
-    
+
     run_config = RunConfig(
         config=config,
         domain_dir=config_path.parent.parent,
@@ -539,6 +549,6 @@ def run_evaluation(
         schema=schema,
         verbose=verbose,
     )
-    
+
     runner = Runner(run_config)
     return runner.run(documents=documents)
