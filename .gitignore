@@ -34,3 +34,5 @@ Thumbs.db
 .claude/
 
 ruff.txt
+
+.coverage
