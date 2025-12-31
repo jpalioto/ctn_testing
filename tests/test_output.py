@@ -767,7 +767,7 @@ class TestResponsePersistence:
             with pytest.raises(PersistenceError) as exc_info:
                 manager.save_response(mock_run_result, prompt_text="Test")
 
-            assert "Cannot save response" in str(exc_info.value)
+            assert "Cannot save to" in str(exc_info.value)
 
     def test_save_response_atomic_no_partial_files(self, temp_output_dir, mock_config, temp_config_file, mock_run_result):
         """On write failure, no partial files are left behind."""
@@ -1095,7 +1095,7 @@ class TestJudgingPersistence:
                     timestamp="2025-01-01T00:00:00Z",
                 )
 
-            assert "Cannot save judging result" in str(exc_info.value)
+            assert "Cannot save to" in str(exc_info.value)
 
     def test_save_judging_atomic_no_partial_files(self, temp_output_dir, mock_config, temp_config_file, mock_comparison):
         """On write failure, no partial files are left behind."""
@@ -1478,7 +1478,7 @@ class TestAnalysisPersistence:
             with pytest.raises(PersistenceError) as exc_info:
                 manager.save_analysis(mock_evaluation_result, mock_analyses)
 
-            assert "Cannot save analysis" in str(exc_info.value)
+            assert "Cannot save to" in str(exc_info.value)
 
     def test_save_analysis_works_with_empty_results(self, temp_output_dir, mock_config, temp_config_file):
         """save_analysis works with no comparisons."""
@@ -1584,3 +1584,296 @@ class TestAnalysisPersistence:
         # Only valid comparison should be included
         assert len(data["comparisons"]) == 1
         assert data["comparisons"][0]["prompt_id"] == "p1"
+
+
+class TestUTF8Encoding:
+    """Tests for UTF-8 encoding in file persistence."""
+
+    def test_utf8_preserved_in_response_file(self, temp_output_dir, mock_config, temp_config_file):
+        """UTF-8 characters are preserved in response file write/read."""
+        from ctn_testing.runners.constraint_runner import RunResult
+
+        mock_config.output = {"include_raw_responses": True}
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=1)
+
+        utf8_output = "Response with special chars: éàü ñ 中文 日本語"
+
+        run_result = RunResult(
+            prompt_id="utf8_test",
+            constraint_name="baseline",
+            input_sent="Test with éàü",
+            output=utf8_output,
+            provider="anthropic",
+            model="sonnet",
+            tokens={"input": 10, "output": 20},
+            timestamp="2025-01-01T00:00:00Z",
+        )
+
+        manager.save_response(run_result, prompt_text="Test with éàü")
+
+        # Read back and verify UTF-8 preserved
+        response_path = manager.responses_dir / "utf8_test_baseline.json"
+        with open(response_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        assert data["output"] == utf8_output
+        assert data["input_sent"] == "Test with éàü"
+        assert data["prompt_text"] == "Test with éàü"
+
+    def test_greek_symbols_survive_roundtrip(self, temp_output_dir, mock_config, temp_config_file):
+        """Greek symbols (Σ, Ψ, Ω, τ) survive write/read roundtrip."""
+        from ctn_testing.runners.constraint_runner import RunResult, DryRunData
+
+        mock_config.output = {"include_raw_responses": True}
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=1)
+
+        greek_output = "Σ(sum) + Ψ(wave) → Ω(omega) with τ(tau) timing"
+        greek_kernel = "CTN_KERNEL Σ(constraints) → Ψ(reasoning) → Ω(output)"
+
+        run_result = RunResult(
+            prompt_id="greek_test",
+            constraint_name="analytical",
+            input_sent="@analytical Test with Σ",
+            output=greek_output,
+            provider="anthropic",
+            model="sonnet",
+            tokens={"input": 15, "output": 30},
+            timestamp="2025-01-01T00:00:00Z",
+            dry_run=DryRunData(
+                kernel=greek_kernel,
+                system_prompt="System with Ψ symbols",
+                user_prompt="User with Ω symbols",
+                parameters={"τ_timing": 0.7},
+            ),
+            kernel=greek_kernel,
+            kernel_match=True,
+        )
+
+        manager.save_response(run_result, prompt_text="Test with Σ Ψ Ω τ")
+
+        # Read back and verify Greek symbols preserved
+        response_path = manager.responses_dir / "greek_test_analytical.json"
+        with open(response_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Check output contains Greek symbols
+        assert "Σ" in data["output"]
+        assert "Ψ" in data["output"]
+        assert "Ω" in data["output"]
+        assert "τ" in data["output"]
+        assert data["output"] == greek_output
+
+        # Check dry_run contains Greek symbols
+        assert data["dry_run"]["kernel"] == greek_kernel
+        assert "Σ" in data["dry_run"]["kernel"]
+        assert "Ψ" in data["dry_run"]["system_prompt"]
+        assert "Ω" in data["dry_run"]["user_prompt"]
+
+        # Check kernel field
+        assert data["kernel"] == greek_kernel
+
+        # Check prompt_text
+        assert "Σ" in data["prompt_text"]
+        assert "Ψ" in data["prompt_text"]
+        assert "Ω" in data["prompt_text"]
+        assert "τ" in data["prompt_text"]
+
+    def test_greek_symbols_in_judging_file(self, temp_output_dir, mock_config, temp_config_file):
+        """Greek symbols survive in judging result files."""
+        from ctn_testing.runners.evaluation import PairedComparison
+        from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+
+        mock_config.output = {"include_raw_responses": True, "include_judge_responses": True}
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=1)
+
+        greek_response = "Σ(sum) approaches Ω as τ→∞"
+
+        comparison = PairedComparison(
+            prompt_id="greek_judge",
+            prompt_text="Explain Σ and Ψ",
+            baseline_constraint="baseline",
+            test_constraint="analytical",
+            baseline_response="Standard response",
+            test_response=greek_response,
+            judging_result=JudgingResult(
+                response_a_scores={"depth": TraitScore("depth", 50, ["Good Σ usage"])},
+                response_b_scores={"depth": TraitScore("depth", 75, ["Excellent Ψ reasoning", "Clear Ω conclusion"])},
+                raw_response='{"analysis": "Σ Ψ Ω τ symbols used"}',
+            ),
+            baseline_was_a=True,
+        )
+
+        manager.save_judging(
+            comparison,
+            judge_model={"provider": "anthropic", "name": "sonnet"},
+            timestamp="2025-01-01T00:00:00Z",
+        )
+
+        # Read back and verify
+        judging_path = manager.judging_dir / "greek_judge_analytical_vs_baseline.json"
+        with open(judging_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        assert "Σ" in data["test_response"]
+        assert "Ω" in data["test_response"]
+        assert "τ" in data["test_response"]
+        assert "Σ" in data["prompt_text"]
+        assert "Ψ" in data["prompt_text"]
+        assert "Σ" in data["judge_raw_response"]
+        assert "Ψ" in data["scores"]["test"]["depth"]["reasons"][0]
+        assert "Ω" in data["scores"]["test"]["depth"]["reasons"][1]
+
+    def test_ensure_ascii_false_no_unicode_escapes(self, temp_output_dir, mock_config, temp_config_file):
+        """Files don't contain unicode escape sequences like \\u03a3."""
+        from ctn_testing.runners.constraint_runner import RunResult
+
+        mock_config.output = {"include_raw_responses": True}
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=1)
+
+        run_result = RunResult(
+            prompt_id="escape_test",
+            constraint_name="baseline",
+            input_sent="Test Σ",
+            output="Output with Σ Ψ Ω τ",
+            provider="anthropic",
+            model="sonnet",
+            tokens={"input": 5, "output": 10},
+            timestamp="2025-01-01T00:00:00Z",
+        )
+
+        manager.save_response(run_result, prompt_text="Prompt Σ")
+
+        # Read raw file content (not JSON parsed)
+        response_path = manager.responses_dir / "escape_test_baseline.json"
+        raw_content = response_path.read_text(encoding="utf-8")
+
+        # Should NOT contain unicode escape sequences
+        assert "\\u03a3" not in raw_content  # Σ
+        assert "\\u03a8" not in raw_content  # Ψ
+        assert "\\u03a9" not in raw_content  # Ω
+        assert "\\u03c4" not in raw_content  # τ
+
+        # Should contain the actual Greek symbols
+        assert "Σ" in raw_content
+        assert "Ψ" in raw_content  # Present in output field
+        assert "Ω" in raw_content
+        assert "τ" in raw_content
+        # Check the output field specifically contains the Greek chars
+        assert '"output": "Output with Σ Ψ Ω τ"' in raw_content
+
+    def test_manifest_utf8_encoding(self, temp_output_dir, temp_config_file):
+        """Manifest file supports UTF-8 characters."""
+        config = MagicMock()
+        config.name = "test_Σ_config"  # Greek in config name
+        config.constraints = []
+        config.test_constraints = []
+        config.models = []
+        config.judge_models = []
+        config.traits_path = Path("/nonexistent/traits.yaml")
+        config.prompts_path = Path("/nonexistent/prompts.yaml")
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=1)
+
+        # Read manifest and check it handles UTF-8
+        with open(manager.manifest_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Manifest should be valid JSON (this will fail if encoding is wrong)
+        assert "run_id" in data
+
+    def test_analysis_utf8_encoding(self, temp_output_dir, mock_config, temp_config_file):
+        """Analysis files support UTF-8 characters in trait names."""
+        from ctn_testing.runners.evaluation import EvaluationResult, PairedComparison
+        from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+        from ctn_testing.statistics.constraint_analysis import ConstraintAnalysis, TraitComparison
+
+        mock_config.output = {}
+        mock_config.name = "utf8_eval"
+        mock_config.baseline_constraint = MagicMock()
+        mock_config.baseline_constraint.name = "baseline"
+
+        manager = RunOutputManager(
+            base_dir=temp_output_dir,
+            config=mock_config,
+            config_path=temp_config_file,
+        )
+        manager.initialize(prompts_count=1)
+
+        # Create comparison with Greek in trait reasons
+        comparison = PairedComparison(
+            prompt_id="p1",
+            prompt_text="Test",
+            baseline_constraint="baseline",
+            test_constraint="analytical",
+            baseline_response="baseline",
+            test_response="test with Σ",
+            judging_result=JudgingResult(
+                response_a_scores={"reasoning_Σ": TraitScore("reasoning_Σ", 50, ["Σ analysis"])},
+                response_b_scores={"reasoning_Σ": TraitScore("reasoning_Σ", 75, ["Better Ψ"])},
+            ),
+            baseline_was_a=True,
+        )
+
+        result = EvaluationResult(
+            config_name="test",
+            timestamp="2025-01-01T00:00:00Z",
+            comparisons=[comparison],
+        )
+
+        analyses = {
+            "analytical": ConstraintAnalysis(
+                constraint="analytical",
+                n_prompts=1,
+                trait_comparisons={
+                    "reasoning_Σ": TraitComparison(
+                        trait="reasoning_Σ",
+                        baseline_mean=50,
+                        test_mean=75,
+                        mean_diff=25,
+                        t_stat=2.0,
+                        p_value=0.05,
+                        effect_size=1.0,
+                        n=1,
+                        significant=True,
+                    ),
+                },
+            ),
+        }
+
+        manager.save_analysis(result, analyses)
+
+        # Read summary and check UTF-8
+        summary_path = manager.analysis_dir / "summary.json"
+        with open(summary_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        assert "reasoning_Σ" in data["results"]["analytical"]["traits"]

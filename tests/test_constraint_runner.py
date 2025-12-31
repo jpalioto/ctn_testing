@@ -9,11 +9,45 @@ from ctn_testing.runners.constraint_runner import (
     ConstraintConfig,
     PromptConfig,
     RunResult,
+    DryRunData,
     ConstraintRunner,
     load_prompts,
     load_constraints,
 )
-from ctn_testing.runners.http_runner import SDKRunner, SDKResponse, SDKError
+from ctn_testing.runners.http_runner import (
+    SDKRunner,
+    SDKResponse,
+    SDKError,
+    DryRunInfo,
+    CombinedResponse,
+)
+
+
+def make_combined_response(
+    output: str = "Response",
+    provider: str = "anthropic",
+    model: str = "claude-sonnet-4",
+    tokens: dict | None = None,
+    kernel: str = "TEST_KERNEL",
+) -> CombinedResponse:
+    """Create a mock CombinedResponse for testing."""
+    tokens = tokens or {"input": 10, "output": 20}
+    return CombinedResponse(
+        dry_run=DryRunInfo(
+            kernel=kernel,
+            system_prompt="System prompt...",
+            user_prompt="User prompt",
+            parameters={"temperature": 0.7},
+        ),
+        response=SDKResponse(
+            output=output,
+            provider=provider,
+            model=model,
+            tokens=tokens,
+            kernel=kernel,
+        ),
+        kernel_match=True,
+    )
 
 
 # Sample prompts YAML
@@ -204,12 +238,7 @@ class TestConstraintRunner:
         self, mock_runner, sample_prompts, sample_constraints
     ):
         """run_single builds correct input string with prefix."""
-        mock_runner.send.return_value = SDKResponse(
-            output="Response",
-            provider="anthropic",
-            model="claude-sonnet-4",
-            tokens={"input": 10, "output": 20},
-        )
+        mock_runner.send_with_dry_run.return_value = make_combined_response()
 
         runner = ConstraintRunner(
             sdk_runner=mock_runner,
@@ -222,19 +251,14 @@ class TestConstraintRunner:
         result = runner.run_single(sample_prompts[0], sample_constraints[1])
 
         # Check the input sent to SDK
-        call_kwargs = mock_runner.send.call_args[1]
+        call_kwargs = mock_runner.send_with_dry_run.call_args[1]
         assert call_kwargs["input"] == "@analytical Explain recursion"
 
     def test_run_single_baseline_no_prefix(
         self, mock_runner, sample_prompts, sample_constraints
     ):
         """Baseline constraint has empty prefix."""
-        mock_runner.send.return_value = SDKResponse(
-            output="Response",
-            provider="anthropic",
-            model="claude-sonnet-4",
-            tokens={"input": 10, "output": 20},
-        )
+        mock_runner.send_with_dry_run.return_value = make_combined_response()
 
         runner = ConstraintRunner(
             sdk_runner=mock_runner,
@@ -244,19 +268,20 @@ class TestConstraintRunner:
 
         result = runner.run_single(sample_prompts[0], sample_constraints[0])
 
-        call_kwargs = mock_runner.send.call_args[1]
+        call_kwargs = mock_runner.send_with_dry_run.call_args[1]
         assert call_kwargs["input"] == "Explain recursion"
         assert result.input_sent == "Explain recursion"
 
     def test_run_single_returns_all_fields(
         self, mock_runner, sample_prompts, sample_constraints
     ):
-        """run_single returns RunResult with all fields."""
-        mock_runner.send.return_value = SDKResponse(
+        """run_single returns RunResult with all fields including dry_run."""
+        mock_runner.send_with_dry_run.return_value = make_combined_response(
             output="This is the response",
             provider="anthropic",
             model="claude-sonnet-4",
             tokens={"input": 15, "output": 25},
+            kernel="MY_KERNEL",
         )
 
         runner = ConstraintRunner(
@@ -278,12 +303,17 @@ class TestConstraintRunner:
         assert result.tokens == {"input": 15, "output": 25}
         assert result.timestamp  # Should be set
         assert result.error is None
+        # New fields from dry-run
+        assert result.dry_run is not None
+        assert result.dry_run.kernel == "MY_KERNEL"
+        assert result.kernel == "MY_KERNEL"
+        assert result.kernel_match is True
 
     def test_run_single_handles_sdk_error(
         self, mock_runner, sample_prompts, sample_constraints
     ):
         """run_single stores error in result on SDK failure."""
-        mock_runner.send.side_effect = SDKError("Connection failed")
+        mock_runner.send_with_dry_run.side_effect = SDKError("Connection failed")
 
         runner = ConstraintRunner(
             sdk_runner=mock_runner,
@@ -302,12 +332,7 @@ class TestConstraintRunner:
         self, mock_runner, sample_prompts, sample_constraints
     ):
         """run_all returns len(prompts) × len(constraints) results."""
-        mock_runner.send.return_value = SDKResponse(
-            output="Response",
-            provider="anthropic",
-            model="claude-sonnet-4",
-            tokens={"input": 10, "output": 20},
-        )
+        mock_runner.send_with_dry_run.return_value = make_combined_response()
 
         runner = ConstraintRunner(
             sdk_runner=mock_runner,
@@ -336,12 +361,7 @@ class TestConstraintRunner:
         self, mock_runner, sample_prompts, sample_constraints
     ):
         """run_prompt returns dict keyed by constraint name."""
-        mock_runner.send.return_value = SDKResponse(
-            output="Response",
-            provider="anthropic",
-            model="claude-sonnet-4",
-            tokens={"input": 10, "output": 20},
-        )
+        mock_runner.send_with_dry_run.return_value = make_combined_response()
 
         runner = ConstraintRunner(
             sdk_runner=mock_runner,
@@ -361,12 +381,7 @@ class TestConstraintRunner:
         self, mock_runner, sample_prompts, sample_constraints
     ):
         """run_prompt runs same prompt with all constraints."""
-        mock_runner.send.return_value = SDKResponse(
-            output="Response",
-            provider="anthropic",
-            model="claude-sonnet-4",
-            tokens={"input": 10, "output": 20},
-        )
+        mock_runner.send_with_dry_run.return_value = make_combined_response()
 
         runner = ConstraintRunner(
             sdk_runner=mock_runner,

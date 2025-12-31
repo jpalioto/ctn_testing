@@ -7,8 +7,40 @@ from unittest.mock import Mock, patch, MagicMock
 import pytest
 
 from ctn_testing.runners.constraint_runner import ConstraintConfig, PromptConfig, RunResult
-from ctn_testing.runners.http_runner import SDKRunner, SDKResponse
+from ctn_testing.runners.http_runner import (
+    SDKRunner,
+    SDKResponse,
+    DryRunInfo,
+    CombinedResponse,
+)
 from ctn_testing.judging.blind_judge import JudgingResult, TraitScore
+
+
+def make_combined_response(
+    output: str = "Test response",
+    provider: str = "anthropic",
+    model: str = "claude-sonnet-4",
+    tokens: dict | None = None,
+    kernel: str = "TEST_KERNEL",
+) -> CombinedResponse:
+    """Create a mock CombinedResponse for testing."""
+    tokens = tokens or {"input": 10, "output": 20}
+    return CombinedResponse(
+        dry_run=DryRunInfo(
+            kernel=kernel,
+            system_prompt="System prompt...",
+            user_prompt="User prompt",
+            parameters={"temperature": 0.7},
+        ),
+        response=SDKResponse(
+            output=output,
+            provider=provider,
+            model=model,
+            tokens=tokens,
+            kernel=kernel,
+        ),
+        kernel_match=True,
+    )
 
 # Import evaluation separately to avoid circular import issues
 from ctn_testing.runners.evaluation import (
@@ -388,18 +420,14 @@ class TestConstraintEvaluator:
             mock_init.assert_called_with(
                 base_url="http://custom:9999",
                 timeout=30.0,
+                strategy=None,
             )
 
     def test_run_produces_evaluation_result(self, config_path):
         """run() produces EvaluationResult with all combinations."""
         with patch.object(SDKRunner, '__init__', return_value=None):
-            with patch.object(SDKRunner, 'send') as mock_send:
-                mock_send.return_value = SDKResponse(
-                    output="Test response",
-                    provider="anthropic",
-                    model="claude-sonnet-4",
-                    tokens={"input": 10, "output": 20},
-                )
+            with patch.object(SDKRunner, 'send_with_dry_run') as mock_send:
+                mock_send.return_value = make_combined_response()
 
                 evaluator = ConstraintEvaluator(config_path, random_seed=42)
                 result = evaluator.run()
@@ -413,13 +441,8 @@ class TestConstraintEvaluator:
     def test_comparisons_are_randomized(self, config_path):
         """Comparisons have randomized A/B order."""
         with patch.object(SDKRunner, '__init__', return_value=None):
-            with patch.object(SDKRunner, 'send') as mock_send:
-                mock_send.return_value = SDKResponse(
-                    output="Test response",
-                    provider="anthropic",
-                    model="claude-sonnet-4",
-                    tokens={"input": 10, "output": 20},
-                )
+            with patch.object(SDKRunner, 'send_with_dry_run') as mock_send:
+                mock_send.return_value = make_combined_response()
 
                 # Run multiple times with different seeds
                 results_seed_1 = []
@@ -443,13 +466,8 @@ class TestConstraintEvaluator:
     def test_progress_callback_called(self, config_path):
         """Progress callback is called during run."""
         with patch.object(SDKRunner, '__init__', return_value=None):
-            with patch.object(SDKRunner, 'send') as mock_send:
-                mock_send.return_value = SDKResponse(
-                    output="Test response",
-                    provider="anthropic",
-                    model="claude-sonnet-4",
-                    tokens={"input": 10, "output": 20},
-                )
+            with patch.object(SDKRunner, 'send_with_dry_run') as mock_send:
+                mock_send.return_value = make_combined_response()
 
                 callback = Mock()
                 evaluator = ConstraintEvaluator(config_path, random_seed=42)
@@ -469,19 +487,14 @@ class TestConstraintEvaluator:
         from ctn_testing.runners.http_runner import SDKError
 
         with patch.object(SDKRunner, '__init__', return_value=None):
-            with patch.object(SDKRunner, 'send') as mock_send:
+            with patch.object(SDKRunner, 'send_with_dry_run') as mock_send:
                 # First call succeeds, rest fail
                 call_count = [0]
 
                 def side_effect(*args, **kwargs):
                     call_count[0] += 1
                     if call_count[0] <= 3:  # First 3 calls succeed (baseline for both prompts + 1)
-                        return SDKResponse(
-                            output="Test response",
-                            provider="anthropic",
-                            model="claude-sonnet-4",
-                            tokens={"input": 10, "output": 20},
-                        )
+                        return make_combined_response()
                     raise SDKError("Connection failed")
 
                 mock_send.side_effect = side_effect

@@ -1,0 +1,52 @@
+name: constraint_adherence_phase1_ctn
+version: "0.1"
+description: |
+  CTN strategy evaluation. Same prompts/constraints as phase1, but using
+  CTN kernel projection instead of operational strategy.
+
+runner:
+  type: sdk_http
+  base_url: "http://localhost:14380"
+  timeout: 60
+  strategy: ctn
+
+prompts:
+  source: prompts/prompts.yaml
+
+models:
+  - provider: anthropic
+    name: sonnet
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+
+constraints:
+  - name: baseline
+    input_prefix: ""
+    description: "Control - no constraint modifier"
+  - name: analytical
+    input_prefix: "@analytical "
+    description: "Engage in explicit step-by-step reasoning"
+  - name: terse
+    input_prefix: "@terse "
+    description: "Be maximally concise"
+
+judge_models:
+  - provider: anthropic
+    name: sonnet
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+
+judging:
+  blind: true
+  traits_definition: definitions/traits.yaml
+
+execution:
+  strategy: full_cross
+  delay: 0.5
+
+output:
+  dir: results/
+  include_raw_responses: true
+  include_judge_responses: true

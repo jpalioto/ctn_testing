@@ -70,7 +70,7 @@ class EvaluationConfig:
     name: str
     version: str
     description: str
-    runner: dict                          # {type, base_url, timeout}
+    runner: dict                          # {type, base_url, timeout, strategy}
     prompts_source: str                   # Relative path to prompts.yaml
     prompts_include_ids: list[str] | None  # Optional subset
     models: list[dict]                    # [{name, provider}]
@@ -347,7 +347,12 @@ class ConstraintEvaluator:
         # Set up SDK runner
         base_url = sdk_base_url or self.config.runner.get("base_url", "http://localhost:14380")
         timeout = self.config.runner.get("timeout", 60)
-        self.sdk_runner = SDKRunner(base_url=base_url, timeout=float(timeout))
+        strategy = self.config.runner.get("strategy")
+        self.sdk_runner = SDKRunner(
+            base_url=base_url,
+            timeout=float(timeout),
+            strategy=strategy,
+        )
 
         # Load prompts
         prompts = load_prompts(self.config.prompts_path)

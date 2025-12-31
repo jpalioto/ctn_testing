@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from .http_runner import SDKRunner, SDKError
+from .http_runner import SDKRunner, SDKError, DryRunInfo, CombinedResponse
 
 
 @dataclass
@@ -28,6 +28,24 @@ class PromptConfig:
 
 
 @dataclass
+class DryRunData:
+    """Dry-run data captured before actual model call."""
+    kernel: str
+    system_prompt: str
+    user_prompt: str
+    parameters: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "kernel": self.kernel,
+            "system_prompt": self.system_prompt,
+            "user_prompt": self.user_prompt,
+            "parameters": self.parameters,
+        }
+
+
+@dataclass
 class RunResult:
     """Result of running a single prompt with a constraint."""
     prompt_id: str
@@ -39,10 +57,16 @@ class RunResult:
     tokens: dict[str, int]
     timestamp: str
     error: str | None = None
+    # Dry-run data (captured before actual call)
+    dry_run: DryRunData | None = None
+    # Kernel from actual response
+    kernel: str = ""
+    # Invariant check
+    kernel_match: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
-        return {
+        result = {
             "prompt_id": self.prompt_id,
             "constraint_name": self.constraint_name,
             "input_sent": self.input_sent,
@@ -53,6 +77,15 @@ class RunResult:
             "timestamp": self.timestamp,
             "error": self.error,
         }
+        if self.dry_run:
+            result["dry_run"] = self.dry_run.to_dict()
+        if self.kernel:
+            result["kernel"] = self.kernel
+        if self.kernel_match is not None:
+            result["invariant_check"] = {
+                "kernel_match": self.kernel_match,
+            }
+        return result
 
 
 class ConstraintRunner:
@@ -89,38 +122,75 @@ class ConstraintRunner:
         self,
         prompt: PromptConfig,
         constraint: ConstraintConfig,
+        capture_dry_run: bool = True,
     ) -> RunResult:
         """Run one prompt with one constraint.
 
         Args:
             prompt: The prompt to run
             constraint: The constraint to apply
+            capture_dry_run: If True, capture dry-run data before actual call
 
         Returns:
-            RunResult with response or error
+            RunResult with response, dry-run data, and invariant check
         """
         # Build full input with constraint prefix
         input_sent = self._build_input(prompt.text, constraint.input_prefix)
         timestamp = datetime.now().isoformat()
 
         try:
-            response = self.sdk_runner.send(
-                input=input_sent,
-                provider=self.provider,
-                model=self.model,
-            )
+            if capture_dry_run:
+                # Use combined method to capture both dry-run and actual
+                combined = self.sdk_runner.send_with_dry_run(
+                    input=input_sent,
+                    provider=self.provider,
+                    model=self.model,
+                )
 
-            return RunResult(
-                prompt_id=prompt.id,
-                constraint_name=constraint.name,
-                input_sent=input_sent,
-                output=response.output,
-                provider=response.provider,
-                model=response.model,
-                tokens=response.tokens,
-                timestamp=timestamp,
-                error=None,
-            )
+                dry_run_data = DryRunData(
+                    kernel=combined.dry_run.kernel,
+                    system_prompt=combined.dry_run.system_prompt,
+                    user_prompt=combined.dry_run.user_prompt,
+                    parameters=combined.dry_run.parameters,
+                )
+
+                return RunResult(
+                    prompt_id=prompt.id,
+                    constraint_name=constraint.name,
+                    input_sent=input_sent,
+                    output=combined.response.output,
+                    provider=combined.response.provider,
+                    model=combined.response.model,
+                    tokens=combined.response.tokens,
+                    timestamp=timestamp,
+                    error=None,
+                    dry_run=dry_run_data,
+                    kernel=combined.response.kernel,
+                    kernel_match=combined.kernel_match,
+                )
+            else:
+                # Legacy mode: just send without dry-run capture
+                response = self.sdk_runner.send(
+                    input=input_sent,
+                    provider=self.provider,
+                    model=self.model,
+                )
+                # Handle the union type
+                from .http_runner import SDKResponse
+                assert isinstance(response, SDKResponse)
+
+                return RunResult(
+                    prompt_id=prompt.id,
+                    constraint_name=constraint.name,
+                    input_sent=input_sent,
+                    output=response.output,
+                    provider=response.provider,
+                    model=response.model,
+                    tokens=response.tokens,
+                    timestamp=timestamp,
+                    error=None,
+                    kernel=response.kernel,
+                )
 
         except SDKError as e:
             return RunResult(

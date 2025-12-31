@@ -1,8 +1,17 @@
 """HTTP runner for CTN SDK server integration."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import requests
+
+
+@dataclass
+class DryRunInfo:
+    """Dry-run response showing what would be sent to the model."""
+    kernel: str                           # The kernel/system prompt
+    system_prompt: str                    # Full system prompt sent
+    user_prompt: str                      # User message sent
+    parameters: dict[str, Any] = field(default_factory=dict)  # Model parameters
 
 
 @dataclass
@@ -12,6 +21,15 @@ class SDKResponse:
     provider: str
     model: str
     tokens: dict[str, int]  # {"input": N, "output": M}
+    kernel: str = ""        # Kernel used for this response
+
+
+@dataclass
+class CombinedResponse:
+    """Combined dry-run and actual response."""
+    dry_run: DryRunInfo
+    response: SDKResponse
+    kernel_match: bool      # Invariant: dry_run.kernel == response.kernel
 
 
 class SDKError(Exception):
@@ -29,14 +47,17 @@ class SDKRunner:
     """
 
     DEFAULT_TIMEOUT = 30.0  # seconds
+    DEFAULT_STRATEGY = "operational"
 
     def __init__(
         self,
         base_url: str = "http://localhost:14380",
         timeout: float | None = None,
+        strategy: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout or self.DEFAULT_TIMEOUT
+        self.strategy = strategy or self.DEFAULT_STRATEGY
 
     def health_check(self) -> bool:
         """Check if SDK server is running.
@@ -81,28 +102,31 @@ class SDKRunner:
         input: str,
         provider: str = "anthropic",
         model: str | None = None,
-        strategy: str = "operational",
+        strategy: str | None = None,
         dry_run: bool = False,
-    ) -> SDKResponse:
+    ) -> SDKResponse | DryRunInfo:
         """Send prompt through SDK.
 
         Args:
             input: The prompt string (e.g. "@analytical Explain recursion")
             provider: LLM provider (anthropic, openai, google)
             model: Model name (uses provider default if None)
-            strategy: Constraint strategy (operational, structural, hybrid)
-            dry_run: If True, returns processed prompt without calling LLM
+            strategy: Constraint strategy (operational, structural, hybrid).
+                      Uses instance default if None.
+            dry_run: If True, returns DryRunInfo without calling LLM
 
         Returns:
-            SDKResponse with output and metadata.
+            SDKResponse with output and metadata, or DryRunInfo if dry_run=True.
 
         Raises:
             SDKError: If request fails or server returns error.
         """
+        effective_strategy = strategy if strategy is not None else self.strategy
+
         payload: dict[str, Any] = {
             "input": input,
             "provider": provider,
-            "strategy": strategy,
+            "strategy": effective_strategy,
             "dry_run": dry_run,
         }
 
@@ -118,6 +142,15 @@ class SDKRunner:
             response.raise_for_status()
             data = response.json()
 
+            if dry_run:
+                # Parse dry-run response format
+                return DryRunInfo(
+                    kernel=data.get("kernel", ""),
+                    system_prompt=data.get("systemPrompt", data.get("system_prompt", "")),
+                    user_prompt=data.get("userPrompt", data.get("user_prompt", "")),
+                    parameters=data.get("parameters", {}),
+                )
+
             return SDKResponse(
                 output=data.get("output", ""),
                 provider=data.get("provider", provider),
@@ -126,6 +159,7 @@ class SDKRunner:
                     "input": data.get("tokens", {}).get("input", 0),
                     "output": data.get("tokens", {}).get("output", 0),
                 },
+                kernel=data.get("kernel", ""),
             )
 
         except requests.exceptions.Timeout:
@@ -148,3 +182,56 @@ class SDKRunner:
                     pass
 
             raise SDKError(error_msg, status_code=status_code)
+
+    def send_with_dry_run(
+        self,
+        input: str,
+        provider: str = "anthropic",
+        model: str | None = None,
+        strategy: str | None = None,
+    ) -> CombinedResponse:
+        """Send prompt through SDK, capturing both dry-run and actual response.
+
+        This method first calls dry-run to capture what will be sent, then
+        makes the actual call. Both results are returned together with an
+        invariant check that the kernels match.
+
+        Args:
+            input: The prompt string (e.g. "@analytical Explain recursion")
+            provider: LLM provider (anthropic, openai, google)
+            model: Model name (uses provider default if None)
+            strategy: Constraint strategy (operational, structural, hybrid).
+                      Uses instance default if None.
+
+        Returns:
+            CombinedResponse with dry_run info, actual response, and invariant check.
+
+        Raises:
+            SDKError: If either request fails.
+        """
+        # 1. Dry-run to capture what will be sent
+        dry_run_result = self.send(
+            input=input,
+            provider=provider,
+            model=model,
+            strategy=strategy,
+            dry_run=True,
+        )
+        assert isinstance(dry_run_result, DryRunInfo)
+
+        # 2. Actual call
+        actual_result = self.send(
+            input=input,
+            provider=provider,
+            model=model,
+            strategy=strategy,
+            dry_run=False,
+        )
+        assert isinstance(actual_result, SDKResponse)
+
+        # 3. Return combined with invariant check
+        return CombinedResponse(
+            dry_run=dry_run_result,
+            response=actual_result,
+            kernel_match=(dry_run_result.kernel == actual_result.kernel),
+        )

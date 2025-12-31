@@ -233,45 +233,16 @@ class RunOutputManager:
         # Check if we should include raw output
         include_raw = self.config.output.get("include_raw_responses", True)
 
-        # Build response data
-        response_data = {
-            "prompt_id": run_result.prompt_id,
-            "prompt_text": prompt_text,
-            "constraint_name": run_result.constraint_name,
-            "input_sent": run_result.input_sent,
-            "output": run_result.output if include_raw else None,
-            "provider": run_result.provider,
-            "model": run_result.model,
-            "tokens": run_result.tokens,
-            "timestamp": run_result.timestamp,
-        }
+        # Build response data using RunResult.to_dict() for new format
+        response_data = run_result.to_dict()
+        response_data["prompt_text"] = prompt_text
 
-        # Include error if present
-        if run_result.error:
-            response_data["error"] = run_result.error
+        # Apply include_raw filter
+        if not include_raw:
+            response_data["output"] = None
 
-        # Write atomically: write to temp file, then rename
-        try:
-            # Create temp file in same directory for atomic rename
-            fd, temp_path = tempfile.mkstemp(
-                dir=self.responses_dir,
-                suffix=".tmp",
-                prefix=f".{filename}.",
-            )
-            try:
-                with os.fdopen(fd, "w") as f:
-                    json.dump(response_data, f, indent=2)
-                # Atomic rename (on POSIX; best-effort on Windows)
-                os.replace(temp_path, dest_path)
-            except Exception:
-                # Clean up temp file on error
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                raise
-        except Exception as e:
-            raise PersistenceError(
-                f"Cannot save response to {dest_path}: {e}"
-            ) from e
+        # Write atomically with UTF-8 encoding
+        self._write_json_file(self.responses_dir, filename, response_data)
 
     def save_judging(
         self,
@@ -290,7 +261,6 @@ class RunOutputManager:
             PersistenceError: If judging result cannot be written.
         """
         filename = f"{comparison.prompt_id}_{comparison.test_constraint}_vs_{comparison.baseline_constraint}.json"
-        dest_path = self.judging_dir / filename
 
         # Check config options
         include_raw_responses = self.config.output.get("include_raw_responses", True)
@@ -334,25 +304,8 @@ class RunOutputManager:
         if comparison.error:
             judging_data["error"] = comparison.error
 
-        # Write atomically: write to temp file, then rename
-        try:
-            fd, temp_path = tempfile.mkstemp(
-                dir=self.judging_dir,
-                suffix=".tmp",
-                prefix=f".{filename}.",
-            )
-            try:
-                with os.fdopen(fd, "w") as f:
-                    json.dump(judging_data, f, indent=2)
-                os.replace(temp_path, dest_path)
-            except Exception:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                raise
-        except Exception as e:
-            raise PersistenceError(
-                f"Cannot save judging result to {dest_path}: {e}"
-            ) from e
+        # Write atomically with UTF-8 encoding
+        self._write_json_file(self.judging_dir, filename, judging_data)
 
     def save_analysis(
         self,
@@ -440,6 +393,41 @@ class RunOutputManager:
         self._write_analysis_file("summary.json", summary_data)
         self._write_analysis_file("comparisons.json", comparisons_data)
 
+    def _write_json_file(self, directory: Path, filename: str, data: dict) -> None:
+        """Write a JSON file atomically with UTF-8 encoding.
+
+        Uses ensure_ascii=False to preserve Unicode characters like Greek
+        symbols (Σ, Ψ, Ω, τ) in the output.
+
+        Args:
+            directory: Directory to write file in
+            filename: Name of the file (e.g., "response.json")
+            data: Data to write as JSON
+
+        Raises:
+            PersistenceError: If file cannot be written.
+        """
+        dest_path = directory / filename
+
+        try:
+            fd, temp_path = tempfile.mkstemp(
+                dir=directory,
+                suffix=".tmp",
+                prefix=f".{filename}.",
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                os.replace(temp_path, dest_path)
+            except Exception:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                raise
+        except Exception as e:
+            raise PersistenceError(
+                f"Cannot save to {dest_path}: {e}"
+            ) from e
+
     def _write_analysis_file(self, filename: str, data: dict) -> None:
         """Write an analysis file atomically.
 
@@ -450,26 +438,7 @@ class RunOutputManager:
         Raises:
             PersistenceError: If file cannot be written.
         """
-        dest_path = self.analysis_dir / filename
-
-        try:
-            fd, temp_path = tempfile.mkstemp(
-                dir=self.analysis_dir,
-                suffix=".tmp",
-                prefix=f".{filename}.",
-            )
-            try:
-                with os.fdopen(fd, "w") as f:
-                    json.dump(data, f, indent=2)
-                os.replace(temp_path, dest_path)
-            except Exception:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                raise
-        except Exception as e:
-            raise PersistenceError(
-                f"Cannot save analysis to {dest_path}: {e}"
-            ) from e
+        self._write_json_file(self.analysis_dir, filename, data)
 
     def _copy_configs(self) -> None:
         """Copy config files to the run directory."""
@@ -534,12 +503,12 @@ class RunOutputManager:
         )
 
     def _write_manifest(self) -> None:
-        """Write manifest to disk."""
+        """Write manifest to disk with UTF-8 encoding."""
         if self._manifest is None:
             return
 
-        with open(self.manifest_path, "w") as f:
-            json.dump(self._manifest.to_dict(), f, indent=2)
+        with open(self.manifest_path, "w", encoding="utf-8") as f:
+            json.dump(self._manifest.to_dict(), f, indent=2, ensure_ascii=False)
 
 
 class NullOutputManager:
