@@ -227,7 +227,7 @@ class EvaluationResult:
         if not manifest_path.exists():
             raise FileNotFoundError(f"Manifest not found: {manifest_path}")
 
-        with open(manifest_path) as f:
+        with open(manifest_path, encoding="utf-8") as f:
             manifest = json.load(f)
 
         config_name = manifest.get("config_file", "unknown").replace(".yaml", "")
@@ -242,7 +242,7 @@ class EvaluationResult:
         responses_dir = run_dir / "responses"
         if responses_dir.exists():
             for response_file in sorted(responses_dir.glob("*.json")):
-                with open(response_file) as f:
+                with open(response_file, encoding="utf-8") as f:
                     data = json.load(f)
 
                 run_result = RunResult(
@@ -263,7 +263,7 @@ class EvaluationResult:
             judging_dir = run_dir / "judging"
             if judging_dir.exists():
                 for judging_file in sorted(judging_dir.glob("*.json")):
-                    with open(judging_file) as f:
+                    with open(judging_file, encoding="utf-8") as f:
                         data = json.load(f)
 
                     # Reconstruct JudgingResult with TraitScore objects
@@ -884,7 +884,7 @@ def load_config(path: Path) -> EvaluationConfig:
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not isinstance(data, dict):

@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-    Run all checks: type checking + unit tests
+    Run all checks: linting + type checking + unit tests
 .DESCRIPTION
-    Runs pyright and pytest. Fails fast on first error.
+    Runs ruff, pyright, and pytest. Fails fast on first error.
     Use before commits to ensure code quality.
 .EXAMPLE
     .\scripts\check.ps1
@@ -15,10 +15,34 @@ Write-Host "  CTN TESTING - PRE-COMMIT CHECKS" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. Type checking
-Write-Host "[1/2] PYRIGHT - Type Checking" -ForegroundColor Yellow
+# 1. Ruff lint
+Write-Host "[1/4] RUFF CHECK - Linting" -ForegroundColor Yellow
 Write-Host "--------------------------------------------"
-pyright ctn_testing/
+uv run ruff check .
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "FAILED: Linting errors found" -ForegroundColor Red
+    exit 1
+}
+Write-Host "PASSED" -ForegroundColor Green
+Write-Host ""
+
+# 2. Ruff format check
+Write-Host "[2/4] RUFF FORMAT - Format Check" -ForegroundColor Yellow
+Write-Host "--------------------------------------------"
+uv run ruff format --check .
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "FAILED: Formatting issues found" -ForegroundColor Red
+    exit 1
+}
+Write-Host "PASSED" -ForegroundColor Green
+Write-Host ""
+
+# 3. Type checking
+Write-Host "[3/4] PYRIGHT - Type Checking" -ForegroundColor Yellow
+Write-Host "--------------------------------------------"
+uv run pyright
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
     Write-Host "FAILED: Type errors found" -ForegroundColor Red
@@ -27,10 +51,10 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "PASSED" -ForegroundColor Green
 Write-Host ""
 
-# 2. Unit tests
-Write-Host "[2/2] PYTEST - Unit Tests" -ForegroundColor Yellow
+# 4. Unit tests
+Write-Host "[4/4] PYTEST - Unit Tests" -ForegroundColor Yellow
 Write-Host "--------------------------------------------"
-pytest tests/ -v --tb=short
+uv run pytest tests/ -v --tb=short
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
     Write-Host "FAILED: Test failures" -ForegroundColor Red

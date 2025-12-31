@@ -38,6 +38,23 @@ class RunSummary:
 
 
 @dataclass
+class DryRunData:
+    """Dry-run capture data from SDK."""
+
+    kernel: str
+    system_prompt: str
+    user_prompt: str
+    parameters: dict
+
+
+@dataclass
+class InvariantCheckData:
+    """Invariant check results."""
+
+    kernel_match: bool
+
+
+@dataclass
 class ResponseData:
     """Data from a single response."""
 
@@ -49,6 +66,13 @@ class ResponseData:
     tokens_in: int
     tokens_out: int
     error: str | None
+    # New fields
+    provider: str = ""
+    model: str = ""
+    timestamp: str = ""
+    kernel: str = ""
+    dry_run: DryRunData | None = None
+    invariant_check: InvariantCheckData | None = None
 
 
 @dataclass
@@ -107,7 +131,7 @@ def get_manifest(run_path: Path) -> dict:
     if not manifest_path.exists():
         return {}
 
-    with open(manifest_path) as f:
+    with open(manifest_path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -124,7 +148,7 @@ def get_run_config(run_path: Path) -> dict:
     for yaml_file in config_dir.glob("*.yaml"):
         if yaml_file.stem not in ("prompts", "traits"):
             try:
-                with open(yaml_file) as f:
+                with open(yaml_file, encoding="utf-8") as f:
                     return yaml.safe_load(f) or {}
             except yaml.YAMLError:
                 continue
@@ -227,8 +251,27 @@ def load_responses(run_path: Path, limit: int | None = None) -> list[ResponseDat
 
     for response_file in response_files:
         try:
-            with open(response_file) as f:
+            with open(response_file, encoding="utf-8") as f:
                 data = json.load(f)
+
+            # Parse dry_run data if present
+            dry_run_data = data.get("dry_run")
+            dry_run = None
+            if dry_run_data and isinstance(dry_run_data, dict):
+                dry_run = DryRunData(
+                    kernel=dry_run_data.get("kernel", ""),
+                    system_prompt=dry_run_data.get("system_prompt", ""),
+                    user_prompt=dry_run_data.get("user_prompt", ""),
+                    parameters=dry_run_data.get("parameters", {}),
+                )
+
+            # Parse invariant_check data if present
+            invariant_data = data.get("invariant_check")
+            invariant_check = None
+            if invariant_data and isinstance(invariant_data, dict):
+                invariant_check = InvariantCheckData(
+                    kernel_match=invariant_data.get("kernel_match", False),
+                )
 
             responses.append(
                 ResponseData(
@@ -240,6 +283,12 @@ def load_responses(run_path: Path, limit: int | None = None) -> list[ResponseDat
                     tokens_in=data.get("tokens", {}).get("input", 0),
                     tokens_out=data.get("tokens", {}).get("output", 0),
                     error=data.get("error"),
+                    provider=data.get("provider", ""),
+                    model=data.get("model", ""),
+                    timestamp=data.get("timestamp", ""),
+                    kernel=data.get("kernel", ""),
+                    dry_run=dry_run,
+                    invariant_check=invariant_check,
                 )
             )
         except (json.JSONDecodeError, KeyError):
@@ -258,18 +307,25 @@ def load_judgings(run_path: Path) -> list[JudgingData]:
 
     for judging_file in sorted(judging_dir.glob("*.json")):
         try:
-            with open(judging_file) as f:
+            with open(judging_file, encoding="utf-8") as f:
                 data = json.load(f)
 
-            # Parse scores
+            # Parse scores - new format uses scores.baseline/scores.test
             baseline_was_a = data.get("baseline_was_a", True)
+            scores = data.get("scores", {})
 
-            if baseline_was_a:
-                baseline_scores = data.get("response_a_scores", {})
-                test_scores = data.get("response_b_scores", {})
+            if scores:
+                # New format: scores.baseline and scores.test
+                baseline_scores = scores.get("baseline", {})
+                test_scores = scores.get("test", {})
             else:
-                baseline_scores = data.get("response_b_scores", {})
-                test_scores = data.get("response_a_scores", {})
+                # Legacy format: response_a_scores and response_b_scores
+                if baseline_was_a:
+                    baseline_scores = data.get("response_a_scores", {})
+                    test_scores = data.get("response_b_scores", {})
+                else:
+                    baseline_scores = data.get("response_b_scores", {})
+                    test_scores = data.get("response_a_scores", {})
 
             judgings.append(
                 JudgingData(
@@ -282,7 +338,7 @@ def load_judgings(run_path: Path) -> list[JudgingData]:
                     baseline_scores=baseline_scores,
                     test_scores=test_scores,
                     baseline_was_a=baseline_was_a,
-                    raw_response=data.get("raw_judge_response"),
+                    raw_response=data.get("judge_raw_response") or data.get("raw_judge_response"),
                 )
             )
         except (json.JSONDecodeError, KeyError):

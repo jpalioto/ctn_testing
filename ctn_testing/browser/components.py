@@ -32,11 +32,45 @@ def render_run_info(run: RunSummary, label: str = "") -> None:
 
 def render_response_detail(response: ResponseData) -> None:
     """Render a single response in detail."""
-    st.caption(f"Tokens: {response.tokens_in} in / {response.tokens_out} out")
+    # Show metadata row
+    meta_cols = st.columns(4)
+    with meta_cols[0]:
+        st.caption(f"Tokens: {response.tokens_in} in / {response.tokens_out} out")
+    with meta_cols[1]:
+        if response.model:
+            st.caption(f"Model: {response.model}")
+    with meta_cols[2]:
+        if response.provider:
+            st.caption(f"Provider: {response.provider}")
+    with meta_cols[3]:
+        if response.invariant_check:
+            if response.invariant_check.kernel_match:
+                st.success("Kernel Match: PASS", icon="\u2705")
+            else:
+                st.error("Kernel Match: FAIL", icon="\u274c")
 
     if response.error:
         st.error(f"Error: {response.error}")
         return
+
+    # Show kernel info if available
+    kernel_text = response.kernel or (response.dry_run.kernel if response.dry_run else "")
+    if kernel_text:
+        with st.expander("Kernel Used", expanded=False):
+            st.code(kernel_text, language="xml")
+
+    # Show dry-run details if available
+    if response.dry_run:
+        with st.expander("Dry-Run Details", expanded=False):
+            if response.dry_run.system_prompt:
+                st.markdown("**System Prompt:**")
+                st.code(response.dry_run.system_prompt, language="xml")
+            if response.dry_run.user_prompt:
+                st.markdown("**User Prompt:**")
+                st.code(response.dry_run.user_prompt, language=None)
+            if response.dry_run.parameters:
+                st.markdown("**Parameters:**")
+                st.json(response.dry_run.parameters)
 
     st.markdown("**Prompt:**")
     prompt_text = response.prompt_text or response.input_sent
@@ -93,9 +127,11 @@ def render_kernel_info(
 ) -> None:
     """Render kernel/strategy information for a constraint.
 
-    Shows the strategy configuration and constraint details since the actual
-    kernel is applied by the SDK server and not stored in response data.
+    Shows kernel data from dry-run capture and invariant check results.
     """
+    # Find a sample response for this constraint
+    sample = next((r for r in responses if r.constraint_name == constraint), None)
+
     # Find the constraint config
     constraint_config = next((c for c in run.constraint_configs if c.name == constraint), None)
 
@@ -116,40 +152,57 @@ def render_kernel_info(
 
     st.markdown("---")
 
-    # Explain where the kernel comes from
-    if run.strategy == "ctn":
-        st.info(
-            "**CTN Strategy:** The SDK server projects a CTN kernel with trait vectors "
-            "based on the constraint prefix. The kernel includes `CTN_KERNEL_SCHEMA` "
-            "with behavioral dimensions. The actual kernel content is not stored in "
-            "the response data - it's applied at request time by the SDK."
-        )
-    elif run.strategy == "operational":
-        st.info(
-            "**Operational Strategy:** The SDK server applies `<behavioral_constraints>` "
-            "XML blocks based on the constraint prefix. These define the behavioral mode "
-            "for the response. The actual kernel content is not stored in the response data."
-        )
-    elif run.strategy == "structural":
-        st.info(
-            "**Structural Strategy:** The SDK server applies structured constraint rules. "
-            "The actual kernel content is not stored in the response data."
-        )
+    # Show invariant check status
+    if sample and sample.invariant_check:
+        if sample.invariant_check.kernel_match:
+            st.success("Kernel Match: PASS - Kernel was applied correctly", icon="\u2705")
+        else:
+            st.error("Kernel Match: FAIL - Kernel mismatch detected", icon="\u274c")
+        st.markdown("---")
+
+    # Show kernel from response data (if available from dry-run capture)
+    kernel_text = None
+    if sample:
+        kernel_text = sample.kernel or (sample.dry_run.kernel if sample.dry_run else None)
+
+    if kernel_text:
+        st.markdown("**Kernel (from dry-run capture):**")
+        st.code(kernel_text, language="xml")
     else:
-        st.warning(
-            "Strategy not detected. The kernel/system prompt applied by the SDK server "
-            "is not stored in the response data."
-        )
+        # Fallback explanation for older data without dry-run capture
+        if run.strategy == "ctn":
+            st.info(
+                "**CTN Strategy:** The SDK server projects a CTN kernel with trait vectors "
+                "based on the constraint prefix. No dry-run capture available for this run."
+            )
+        elif run.strategy == "operational":
+            st.info(
+                "**Operational Strategy:** The SDK server applies `<behavioral_constraints>` "
+                "XML blocks. No dry-run capture available for this run."
+            )
+        elif run.strategy == "structural":
+            st.info(
+                "**Structural Strategy:** The SDK server applies structured constraint rules. "
+                "No dry-run capture available for this run."
+            )
+        else:
+            st.warning("No kernel data available. Dry-run capture may not have been enabled.")
+
+    # Show dry-run parameters if available
+    if sample and sample.dry_run and sample.dry_run.parameters:
+        with st.expander("Dry-Run Parameters"):
+            st.json(sample.dry_run.parameters)
+
+    # Show system prompt from dry-run if different from kernel
+    if sample and sample.dry_run and sample.dry_run.system_prompt:
+        if sample.dry_run.system_prompt != kernel_text:
+            with st.expander("System Prompt (from dry-run)"):
+                st.code(sample.dry_run.system_prompt, language="xml")
 
     # Show sample input_sent
-    sample = next((r for r in responses if r.constraint_name == constraint), None)
     if sample:
         with st.expander("Show Input Sent to Model"):
             st.code(sample.input_sent, language=None)
-            st.caption(
-                "Note: This is only the user message. The system prompt/kernel "
-                "is applied separately by the SDK server."
-            )
 
 
 def render_scores_table(judging: JudgingData) -> None:
