@@ -30,6 +30,9 @@ constraints:
   - name: terse
     input_prefix: "@terse "
     description: "Be maximally concise"
+  - name: adversarial
+    input_prefix: "@adversarial "
+    description: "Counter mode with error correction"
 
 judge_models:
   - provider: anthropic

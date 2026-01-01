@@ -921,3 +921,33 @@ def load_config(path: Path) -> EvaluationConfig:
         output=data.get("output", {}),
         config_dir=path.parent,
     )
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: python -m ctn_testing.runners.evaluation <config_path>")
+        print("   or: ctn-test run <config_path>")
+        sys.exit(1)
+
+    config_path = Path(sys.argv[1])
+    if not config_path.exists():
+        print(f"Error: Config file not found: {config_path}")
+        sys.exit(1)
+
+    def progress_callback(
+        stage: str, current: int, total: int, success: bool = True, error_msg: str | None = None
+    ) -> None:
+        status = "[ok]" if success else "[error]"
+        print(f"\r{stage}: {current}/{total} {status}", end="", flush=True)
+        if current == total:
+            print()
+
+    evaluator = ConstraintEvaluator(config_path=config_path)
+    result = evaluator.run(progress_callback=progress_callback)
+
+    print()
+    print(f"Completed: {len(result.run_results)} responses, {len(result.comparisons)} comparisons")
+    if result.run_dir:
+        print(f"Results saved to: {result.run_dir}")
