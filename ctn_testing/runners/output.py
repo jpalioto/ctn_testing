@@ -223,7 +223,6 @@ class RunOutputManager:
             PersistenceError: If response cannot be written.
         """
         filename = f"{run_result.prompt_id}_{run_result.constraint_name}.json"
-        dest_path = self.responses_dir / filename
 
         # Check if we should include raw output
         include_raw = self.config.output.get("include_raw_responses", True)

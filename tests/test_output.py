@@ -1,7 +1,6 @@
 """Tests for evaluation output management."""
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -520,7 +519,6 @@ class TestFailFastValidation:
         )
 
         # Mock json.dump to fail during manifest write
-        original_dump = json.dump
         call_count = [0]
 
         def failing_dump(*args, **kwargs):
@@ -802,8 +800,6 @@ class TestResponsePersistence:
         manager.initialize(prompts_count=1)
 
         # Mock os.replace to fail after temp file is written
-        original_replace = os.replace
-
         def failing_replace(src, dst):
             raise OSError("Replace failed")
 

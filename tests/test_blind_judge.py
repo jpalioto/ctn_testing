@@ -386,7 +386,7 @@ class TestBlindJudge:
             tokens={"input": 100, "output": 50},
         )
 
-        result = judge.judge(
+        judge.judge(
             response_a="Response A",
             response_b="Response B",
             prompt_text="Test prompt",

@@ -44,7 +44,7 @@ def make_combined_response(
 
 
 # Import evaluation separately to avoid circular import issues
-from ctn_testing.runners.evaluation import (
+from ctn_testing.runners.evaluation import (  # noqa: E402
     ConstraintEvaluator,
     EvaluationResult,
     PairedComparison,
@@ -411,7 +411,7 @@ class TestConstraintEvaluator:
     def test_evaluator_respects_sdk_base_url_override(self, config_path):
         """Evaluator uses override SDK URL."""
         with patch.object(SDKRunner, "__init__", return_value=None) as mock_init:
-            evaluator = ConstraintEvaluator(
+            ConstraintEvaluator(
                 config_path,
                 sdk_base_url="http://custom:9999",
             )
@@ -475,9 +475,10 @@ class TestConstraintEvaluator:
                 # Should be called for running and judging phases
                 assert callback.call_count > 0
 
-                # Check call patterns
+                # Check call patterns - callback receives ProgressInfo objects
                 calls = callback.call_args_list
-                stages = [call[0][0] for call in calls]
+                # First argument is a ProgressInfo object with a stage attribute
+                stages = [call[0][0].stage for call in calls]
                 assert "running" in stages
                 assert "judging" in stages
 

@@ -2,6 +2,7 @@
 
 import json
 import random
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,7 @@ from .output import NullOutputManager, RunOutputManager
 # ANSI color codes for terminal output
 GREEN = "\033[92m"
 RED = "\033[91m"
+YELLOW = "\033[93m"
 RESET = "\033[0m"
 
 
@@ -37,31 +39,52 @@ def format_status(success: bool) -> str:
         return f"{RED}[error]{RESET}"
 
 
+@dataclass
+class ProgressInfo:
+    """Detailed progress information for callbacks."""
+
+    stage: str  # "running" or "judging"
+    current: int
+    total: int
+    success: bool
+    error_msg: str | None = None
+    # Run phase details
+    constraint_name: str | None = None
+    prompt_id: str | None = None
+    prompt_text: str | None = None
+    duration_secs: float | None = None
+    # Judge phase details
+    baseline_constraint: str | None = None
+    test_constraint: str | None = None
+
+
 # Type alias for progress callback
-# New signature: (stage, current, total, success, error_msg)
-# Old signature: (stage, current, total) - still supported for backward compatibility
-ProgressCallback = Callable[[str, int, int, bool, str | None], None]
+# New signature: (info: ProgressInfo) - detailed info
+# Old signature: (stage, current, total, success, error_msg) - still supported
+# Legacy signature: (stage, current, total) - still supported
+ProgressCallback = Callable[[ProgressInfo], None]
 
 
 def _call_progress(
     callback: Callable | None,
-    stage: str,
-    current: int,
-    total: int,
-    success: bool = True,
-    error_msg: str | None = None,
+    info: ProgressInfo,
 ) -> None:
     """Call progress callback with backward compatibility.
 
-    Tries new signature first, falls back to old 3-arg signature.
+    Tries new ProgressInfo signature first, falls back to old signatures.
     """
     if callback is None:
         return
     try:
-        callback(stage, current, total, success, error_msg)
+        # Try new signature with ProgressInfo
+        callback(info)
     except TypeError:
-        # Backward compatibility: old callback signature (stage, current, total)
-        callback(stage, current, total)
+        # Try intermediate signature (stage, current, total, success, error_msg)
+        try:
+            callback(info.stage, info.current, info.total, info.success, info.error_msg)
+        except TypeError:
+            # Fall back to legacy signature (stage, current, total)
+            callback(info.stage, info.current, info.total)
 
 
 @dataclass
@@ -405,12 +428,12 @@ class ConstraintEvaluator:
 
     def run(
         self,
-        progress_callback: Callable[[str, int, int], None] | None = None,
+        progress_callback: Callable[..., None] | None = None,
     ) -> EvaluationResult:
         """Run full evaluation.
 
         Args:
-            progress_callback: Called with (stage, current, total) during run
+            progress_callback: Called with ProgressInfo during run (legacy 3/5-arg signatures also supported)
 
         Returns:
             EvaluationResult with all run results and comparisons
@@ -476,9 +499,15 @@ class ConstraintEvaluator:
         current = 0
 
         for prompt in self.prompts:
-            prompt_results = self.constraint_runner.run_prompt(prompt)
-            for constraint_name, run_result in prompt_results.items():
+            for constraint in self.config.constraints:
+                current += 1
+                start_time = time.time()
+
+                # Run single constraint
+                run_result = self.constraint_runner.run_single(prompt, constraint)
                 result.run_results.append(run_result)
+
+                duration = time.time() - start_time
 
                 # Save response to disk (fail-fast on error)
                 self._output_manager.save_response(
@@ -486,16 +515,19 @@ class ConstraintEvaluator:
                     prompt_text=prompt.text,
                 )
 
-                current += 1
                 success = run_result.error is None
-                _call_progress(
-                    progress_callback,
-                    "running",
-                    current,
-                    total,
+                info = ProgressInfo(
+                    stage="running",
+                    current=current,
+                    total=total,
                     success=success,
                     error_msg=run_result.error,
+                    constraint_name=constraint.name,
+                    prompt_id=prompt.id,
+                    prompt_text=prompt.text,
+                    duration_secs=duration,
                 )
+                _call_progress(progress_callback, info)
 
     def _judge_phase(
         self,
@@ -541,19 +573,25 @@ class ConstraintEvaluator:
 
             for test_constraint in test_constraints:
                 test_result = prompt_results.get(test_constraint.name)
+                current += 1
+                start_time = time.time()
 
                 if test_result is None or test_result.error:
                     # Skip if test failed
-                    current += 1
                     error_msg = test_result.error if test_result else "missing result"
-                    _call_progress(
-                        progress_callback,
-                        "judging",
-                        current,
-                        total,
+                    info = ProgressInfo(
+                        stage="judging",
+                        current=current,
+                        total=total,
                         success=False,
                         error_msg=error_msg,
+                        prompt_id=prompt.id,
+                        prompt_text=prompt.text,
+                        baseline_constraint=baseline.name,
+                        test_constraint=test_constraint.name,
+                        duration_secs=0.0,
                     )
+                    _call_progress(progress_callback, info)
                     continue
 
                 comparison = self._compare_pair(
@@ -565,6 +603,8 @@ class ConstraintEvaluator:
                 )
                 result.comparisons.append(comparison)
 
+                duration = time.time() - start_time
+
                 # Save judging result to disk (fail-fast on error)
                 self._output_manager.save_judging(
                     comparison=comparison,
@@ -572,16 +612,20 @@ class ConstraintEvaluator:
                     timestamp=datetime.now().isoformat(),
                 )
 
-                current += 1
                 success = comparison.error is None
-                _call_progress(
-                    progress_callback,
-                    "judging",
-                    current,
-                    total,
+                info = ProgressInfo(
+                    stage="judging",
+                    current=current,
+                    total=total,
                     success=success,
                     error_msg=comparison.error,
+                    prompt_id=prompt.id,
+                    prompt_text=prompt.text,
+                    baseline_constraint=baseline.name,
+                    test_constraint=test_constraint.name,
+                    duration_secs=duration,
                 )
+                _call_progress(progress_callback, info)
 
     def _compare_pair(
         self,
@@ -775,34 +819,43 @@ class ConstraintEvaluator:
 
             for test_constraint in test_constraints:
                 test_result = prompt_results.get(test_constraint.name)
+                current += 1
+                start_time = time.time()
+
+                # Reconstruct prompt text for display
+                prompt_text = baseline_result.input_sent.replace(baseline.input_prefix, "")
 
                 if test_result is None or test_result.error:
                     # Skip if test failed
-                    current += 1
                     error_msg = test_result.error if test_result else "missing result"
-                    _call_progress(
-                        progress_callback,
-                        "rejudging",
-                        current,
-                        total,
+                    info = ProgressInfo(
+                        stage="rejudging",
+                        current=current,
+                        total=total,
                         success=False,
                         error_msg=error_msg,
+                        prompt_id=prompt_id,
+                        prompt_text=prompt_text,
+                        baseline_constraint=baseline.name,
+                        test_constraint=test_constraint.name,
+                        duration_secs=0.0,
                     )
+                    _call_progress(progress_callback, info)
                     continue
 
                 # Run comparison with the provided judge
                 comparison = self._compare_pair_with_judge(
                     judge=judge,
                     prompt_id=prompt_id,
-                    prompt_text=baseline_result.input_sent.replace(
-                        baseline.input_prefix, ""
-                    ),  # Reconstruct prompt text
+                    prompt_text=prompt_text,
                     baseline_result=baseline_result,
                     test_result=test_result,
                     baseline_constraint=baseline.name,
                     test_constraint=test_constraint.name,
                 )
                 result.comparisons.append(comparison)
+
+                duration = time.time() - start_time
 
                 # Save judging result
                 output_manager.save_judging(
@@ -811,16 +864,20 @@ class ConstraintEvaluator:
                     timestamp=datetime.now().isoformat(),
                 )
 
-                current += 1
                 success = comparison.error is None
-                _call_progress(
-                    progress_callback,
-                    "rejudging",
-                    current,
-                    total,
+                info = ProgressInfo(
+                    stage="rejudging",
+                    current=current,
+                    total=total,
                     success=success,
                     error_msg=comparison.error,
+                    prompt_id=prompt_id,
+                    prompt_text=prompt_text,
+                    baseline_constraint=baseline.name,
+                    test_constraint=test_constraint.name,
+                    duration_secs=duration,
                 )
+                _call_progress(progress_callback, info)
 
     def _compare_pair_with_judge(
         self,
@@ -936,13 +993,46 @@ if __name__ == "__main__":
         print(f"Error: Config file not found: {config_path}")
         sys.exit(1)
 
-    def progress_callback(
-        stage: str, current: int, total: int, success: bool = True, error_msg: str | None = None
-    ) -> None:
-        status = "[ok]" if success else "[error]"
-        print(f"\r{stage}: {current}/{total} {status}", end="", flush=True)
-        if current == total:
-            print()
+    current_stage = ""
+    errors: list[str] = []
+
+    def truncate(text: str, max_len: int = 40) -> str:
+        if len(text) <= max_len:
+            return text
+        return text[: max_len - 3] + "..."
+
+    def progress_callback(info: ProgressInfo) -> None:
+        global current_stage
+        # Print stage header when switching
+        if info.stage != current_stage:
+            if current_stage:
+                print()
+            if info.stage == "running":
+                print("Generating responses:")
+            elif info.stage == "judging":
+                print("\nJudging responses:")
+            current_stage = info.stage
+
+        index = f"[{info.current}/{info.total}]"
+        timing = f"({info.duration_secs:.1f}s)" if info.duration_secs else ""
+
+        if info.stage == "running":
+            constraint = info.constraint_name or "unknown"
+            constraint_display = "baseline" if constraint == "baseline" else f"@{constraint}"
+            prompt = truncate(info.prompt_text or "", 35)
+            status = f"{GREEN}OK{RESET}" if info.success else f"{RED}ERROR{RESET}"
+            if info.success:
+                print(f"  {index} {constraint_display}: {prompt}... {status} {timing}")
+            else:
+                error = truncate(info.error_msg or "unknown", 40)
+                print(f"  {index} {constraint_display}: {prompt}... {status} ({error})")
+                errors.append(f"@{constraint}: {prompt} ({error})")
+        elif info.stage == "judging":
+            baseline = info.baseline_constraint or "baseline"
+            test = info.test_constraint or "unknown"
+            prompt = truncate(info.prompt_text or "", 30)
+            status = f"{GREEN}OK{RESET}" if info.success else f"{YELLOW}SKIP{RESET}"
+            print(f"  {index} {baseline} vs @{test}: {prompt}... {status} {timing}")
 
     evaluator = ConstraintEvaluator(config_path=config_path)
     result = evaluator.run(progress_callback=progress_callback)

@@ -433,10 +433,10 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as mock_blind_judge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
-                MockBlindJudge.return_value = mock_judge
+                mock_blind_judge.return_value = mock_judge
 
                 result = evaluator.rejudge(
                     responses_path=populated_run_dir,
@@ -459,10 +459,10 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as mock_blind_judge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
-                MockBlindJudge.return_value = mock_judge
+                mock_blind_judge.return_value = mock_judge
 
                 result = evaluator.rejudge(
                     responses_path=populated_run_dir,
@@ -482,10 +482,10 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as mock_blind_judge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
-                MockBlindJudge.return_value = mock_judge
+                mock_blind_judge.return_value = mock_judge
 
                 result = evaluator.rejudge(
                     responses_path=populated_run_dir,
@@ -508,10 +508,10 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as mock_blind_judge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
-                MockBlindJudge.return_value = mock_judge
+                mock_blind_judge.return_value = mock_judge
 
                 result = evaluator.rejudge(
                     responses_path=populated_run_dir,
@@ -532,10 +532,10 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as mock_blind_judge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
-                MockBlindJudge.return_value = mock_judge
+                mock_blind_judge.return_value = mock_judge
 
                 result = evaluator.rejudge(
                     responses_path=populated_run_dir,
@@ -564,10 +564,10 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as mock_blind_judge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
-                MockBlindJudge.return_value = mock_judge
+                mock_blind_judge.return_value = mock_judge
 
                 result = evaluator.rejudge(
                     responses_path=populated_run_dir,
@@ -588,10 +588,10 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as mock_blind_judge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
-                MockBlindJudge.return_value = mock_judge
+                mock_blind_judge.return_value = mock_judge
 
                 evaluator.rejudge(
                     responses_path=populated_run_dir,
@@ -612,10 +612,10 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as mock_blind_judge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
-                MockBlindJudge.return_value = mock_judge
+                mock_blind_judge.return_value = mock_judge
 
                 evaluator.rejudge(
                     responses_path=populated_run_dir,
@@ -624,8 +624,8 @@ prompts:
                 )
 
                 # Verify BlindJudge was created with override
-                MockBlindJudge.assert_called_once()
-                call_kwargs = MockBlindJudge.call_args[1]
+                mock_blind_judge.assert_called_once()
+                call_kwargs = mock_blind_judge.call_args[1]
                 assert call_kwargs["judge_model"] == "haiku"
                 assert call_kwargs["judge_provider"] == "anthropic"
 
@@ -646,10 +646,10 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as mock_blind_judge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
-                MockBlindJudge.return_value = mock_judge
+                mock_blind_judge.return_value = mock_judge
 
                 evaluator.rejudge(
                     responses_path=populated_run_dir,
@@ -697,10 +697,10 @@ prompts:
                 raw_response="{}",
             )
 
-            with patch("ctn_testing.runners.evaluation.BlindJudge") as MockBlindJudge:
+            with patch("ctn_testing.runners.evaluation.BlindJudge") as mock_blind_judge:
                 mock_judge = MagicMock()
                 mock_judge.judge.return_value = mock_judging_result
-                MockBlindJudge.return_value = mock_judge
+                mock_blind_judge.return_value = mock_judge
 
                 evaluator.rejudge(
                     responses_path=populated_run_dir,

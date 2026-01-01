@@ -238,7 +238,7 @@ class TestConstraintRunner:
         )
 
         # Test with analytical constraint
-        result = runner.run_single(sample_prompts[0], sample_constraints[1])
+        runner.run_single(sample_prompts[0], sample_constraints[1])
 
         # Check the input sent to SDK
         call_kwargs = mock_runner.send_with_dry_run.call_args[1]

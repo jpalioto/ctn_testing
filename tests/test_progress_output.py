@@ -4,6 +4,7 @@ from ctn_testing.runners.evaluation import (
     GREEN,
     RED,
     RESET,
+    ProgressInfo,
     _call_progress,
     format_status,
 )
@@ -38,83 +39,104 @@ class TestFormatStatus:
 class TestCallProgress:
     """Tests for _call_progress helper function."""
 
-    def test_calls_new_signature_with_all_args(self):
-        """Calls callback with new 5-arg signature."""
+    def test_calls_new_signature_with_progress_info(self):
+        """Calls callback with ProgressInfo object."""
         calls = []
 
-        def new_callback(stage, current, total, success, error_msg):
-            calls.append((stage, current, total, success, error_msg))
+        def new_callback(info: ProgressInfo):
+            calls.append(info)
 
-        _call_progress(new_callback, "running", 1, 10, success=True, error_msg=None)
+        info = ProgressInfo(stage="running", current=1, total=10, success=True)
+        _call_progress(new_callback, info)
 
         assert len(calls) == 1
-        assert calls[0] == ("running", 1, 10, True, None)
+        assert calls[0].stage == "running"
+        assert calls[0].current == 1
+        assert calls[0].total == 10
+        assert calls[0].success is True
 
     def test_passes_error_message(self):
-        """Passes error message to callback."""
+        """Passes error message in ProgressInfo."""
         calls = []
 
-        def new_callback(stage, current, total, success, error_msg):
+        def new_callback(info: ProgressInfo):
+            calls.append(info)
+
+        info = ProgressInfo(
+            stage="judging", current=5, total=20, success=False, error_msg="API timeout"
+        )
+        _call_progress(new_callback, info)
+
+        assert len(calls) == 1
+        assert calls[0].error_msg == "API timeout"
+        assert calls[0].success is False
+
+    def test_backward_compatible_with_5arg_signature(self):
+        """Falls back to 5-arg signature for legacy callbacks."""
+        calls = []
+
+        def old_callback(stage, current, total, success, error_msg):
             calls.append((stage, current, total, success, error_msg))
 
-        _call_progress(new_callback, "judging", 5, 20, success=False, error_msg="API timeout")
+        info = ProgressInfo(stage="running", current=3, total=15, success=True)
+        _call_progress(old_callback, info)
 
         assert len(calls) == 1
-        assert calls[0] == ("judging", 5, 20, False, "API timeout")
+        assert calls[0] == ("running", 3, 15, True, None)
 
-    def test_backward_compatible_with_old_signature(self):
-        """Falls back to old 3-arg signature for legacy callbacks."""
+    def test_backward_compatible_with_3arg_signature(self):
+        """Falls back to 3-arg signature for very old callbacks."""
         calls = []
 
         def old_callback(stage, current, total):
             calls.append((stage, current, total))
 
-        _call_progress(old_callback, "running", 3, 15, success=True, error_msg=None)
+        info = ProgressInfo(
+            stage="judging", current=2, total=10, success=False, error_msg="Some error"
+        )
+        _call_progress(old_callback, info)
 
-        assert len(calls) == 1
-        assert calls[0] == ("running", 3, 15)
-
-    def test_backward_compatible_ignores_extra_args(self):
-        """Old callbacks don't receive success/error_msg."""
-        calls = []
-
-        def old_callback(stage, current, total):
-            calls.append((stage, current, total))
-
-        _call_progress(old_callback, "judging", 2, 10, success=False, error_msg="Some error")
-
-        # Old callback was still called, just without the extra args
         assert len(calls) == 1
         assert calls[0] == ("judging", 2, 10)
 
     def test_none_callback_does_nothing(self):
         """None callback is handled gracefully."""
+        info = ProgressInfo(stage="running", current=1, total=10, success=True)
         # Should not raise
-        _call_progress(None, "running", 1, 10, success=True, error_msg=None)
+        _call_progress(None, info)
 
-    def test_default_success_is_true(self):
-        """Default success value is True."""
-        calls = []
+    def test_progress_info_has_constraint_details(self):
+        """ProgressInfo can include constraint details."""
+        info = ProgressInfo(
+            stage="running",
+            current=1,
+            total=10,
+            success=True,
+            constraint_name="analytical",
+            prompt_id="test_prompt",
+            prompt_text="What is recursion?",
+            duration_secs=1.5,
+        )
 
-        def new_callback(stage, current, total, success, error_msg):
-            calls.append((stage, current, total, success, error_msg))
+        assert info.constraint_name == "analytical"
+        assert info.prompt_id == "test_prompt"
+        assert info.prompt_text == "What is recursion?"
+        assert info.duration_secs == 1.5
 
-        _call_progress(new_callback, "running", 1, 10)
+    def test_progress_info_has_judging_details(self):
+        """ProgressInfo can include judging details."""
+        info = ProgressInfo(
+            stage="judging",
+            current=5,
+            total=20,
+            success=True,
+            baseline_constraint="baseline",
+            test_constraint="analytical",
+            prompt_text="What is recursion?",
+        )
 
-        assert len(calls) == 1
-        assert calls[0][3] is True  # success defaults to True
-
-    def test_default_error_msg_is_none(self):
-        """Default error_msg value is None."""
-        calls = []
-
-        def new_callback(stage, current, total, success, error_msg):
-            calls.append((stage, current, total, success, error_msg))
-
-        _call_progress(new_callback, "running", 1, 10)
-
-        assert len(calls) == 1
-        assert calls[0][4] is None  # error_msg defaults to None
+        assert info.baseline_constraint == "baseline"
+        assert info.test_constraint == "analytical"
 
 
 class TestProgressCallbackIntegration:
@@ -145,12 +167,14 @@ class TestProgressCallbackIntegration:
     def test_callback_can_print_colored_output(self, capsys):
         """Callback can print colored output to terminal."""
 
-        def print_callback(stage, current, total, success=True, error_msg=None):
-            status = format_status(success)
-            print(f"{stage}: {current}/{total} {status}")
+        def print_callback(info: ProgressInfo):
+            status = format_status(info.success)
+            print(f"{info.stage}: {info.current}/{info.total} {status}")
 
-        _call_progress(print_callback, "running", 1, 57, success=True)
-        _call_progress(print_callback, "running", 2, 57, success=False, error_msg="fail")
+        info1 = ProgressInfo(stage="running", current=1, total=57, success=True)
+        info2 = ProgressInfo(stage="running", current=2, total=57, success=False, error_msg="fail")
+        _call_progress(print_callback, info1)
+        _call_progress(print_callback, info2)
 
         captured = capsys.readouterr()
         lines = captured.out.strip().split("\n")
