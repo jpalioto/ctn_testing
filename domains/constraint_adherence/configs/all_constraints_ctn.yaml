@@ -1,0 +1,114 @@
+name: all_constraints_ctn
+version: "1.0"
+description: |
+  Comprehensive test of all 16 SDK steering constraints using CTN kernel projection.
+  Tests: analytical, terse, verbose, precise, creative, formal, casual, strict,
+  flexible, clarity, smooth, focused, structural, stable, research, adversarial.
+
+  With 19 prompts x 17 constraints = 323 API calls.
+
+runner:
+  type: sdk_http
+  base_url: "http://localhost:14380"
+  timeout: 60
+  strategy: ctn
+
+prompts:
+  source: prompts/prompts.yaml
+
+models:
+  - provider: anthropic
+    name: sonnet
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+
+constraints:
+  # Control
+  - name: baseline
+    input_prefix: ""
+    description: "Control - no constraint modifier"
+
+  # Reasoning style
+  - name: analytical
+    input_prefix: "@analytical "
+    description: "Step-by-step analytical reasoning"
+  - name: research
+    input_prefix: "@research "
+    description: "Research-oriented exploration"
+
+  # Length/verbosity
+  - name: terse
+    input_prefix: "@terse "
+    description: "Maximally concise responses"
+  - name: verbose
+    input_prefix: "@verbose "
+    description: "Detailed, thorough responses"
+
+  # Precision/creativity spectrum
+  - name: precise
+    input_prefix: "@precise "
+    description: "Deterministic, grounded responses"
+  - name: creative
+    input_prefix: "@creative "
+    description: "Exploratory, creative responses"
+
+  # Formality
+  - name: formal
+    input_prefix: "@formal "
+    description: "Formal, professional tone"
+  - name: casual
+    input_prefix: "@casual "
+    description: "Casual, conversational tone"
+
+  # Compliance
+  - name: strict
+    input_prefix: "@strict "
+    description: "Strictly compliant responses"
+  - name: flexible
+    input_prefix: "@flexible "
+    description: "Flexible, adaptive responses"
+
+  # Communication style
+  - name: clarity
+    input_prefix: "@clarity "
+    description: "Emphasis on clear communication"
+  - name: smooth
+    input_prefix: "@smooth "
+    description: "Smooth, flowing responses"
+  - name: focused
+    input_prefix: "@focused "
+    description: "Focused, on-topic responses"
+
+  # Structure
+  - name: structural
+    input_prefix: "@structural "
+    description: "Well-structured, organized responses"
+  - name: stable
+    input_prefix: "@stable "
+    description: "Stable, consistent responses"
+
+  # Adversarial
+  - name: adversarial
+    input_prefix: "@adversarial "
+    description: "Counter mode with error correction"
+
+judge_models:
+  - provider: anthropic
+    name: sonnet
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+
+judging:
+  blind: true
+  traits_definition: definitions/traits.yaml
+
+execution:
+  strategy: full_cross
+  delay: 0.5
+
+output:
+  dir: results/
+  include_raw_responses: true
+  include_judge_responses: true
