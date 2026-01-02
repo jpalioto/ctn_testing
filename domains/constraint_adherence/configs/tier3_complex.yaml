@@ -1,0 +1,28 @@
+name: tier3_complex
+version: '1.0'
+description: 'Tier 3 Complex Reasoning Tests: Hallucination, Chain Coherence, Sycophancy'
+runner:
+  type: sdk_http
+  base_url: http://localhost:14380
+  timeout: 60
+prompts:
+  sources:
+  - prompts/tier3a_hallucination.yaml
+  - prompts/tier3b_reasoning.yaml
+  - prompts/tier3d_sycophancy.yaml
+models:
+- name: claude-sonnet-4
+  provider: anthropic
+constraints:
+- name: baseline
+- name: analytical
+- name: precise
+- name: strict
+strategy: ctn-v2
+judging:
+  enabled: true
+  provider: anthropic
+  model: claude-sonnet-4
+output:
+  dir: results
+  include_raw_responses: true

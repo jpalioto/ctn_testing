@@ -36,3 +36,6 @@ Thumbs.db
 ruff.txt
 
 .coverage
+
+# External datasets (download separately)
+domains/constraint_adherence/data/
