@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..statistics.constraint_analysis import ConstraintAnalysis
     from .constraint_runner import RunResult
-    from .evaluation import EvaluationConfig, EvaluationResult, PairedComparison
+    from .evaluation import (
+        EvaluationConfig,
+        EvaluationResult,
+        PairedComparison,
+        SingleResponseScore,
+    )
 
 
 class PersistenceError(Exception):
@@ -303,6 +308,57 @@ class RunOutputManager:
         # Write atomically with UTF-8 encoding
         self._write_json_file(self.judging_dir, filename, judging_data)
 
+    def save_single_judging(
+        self,
+        single_score: "SingleResponseScore",
+        judge_model: dict,
+        timestamp: str,
+    ) -> None:
+        """Save individual single-response scoring result to judging/ directory.
+
+        Args:
+            single_score: Single response scoring result
+            judge_model: Judge model config {"provider": ..., "name": ...}
+            timestamp: Timestamp of the scoring call
+
+        Raises:
+            PersistenceError: If scoring result cannot be written.
+        """
+        filename = f"{single_score.prompt_id}_{single_score.constraint_name}_single.json"
+
+        # Check config options
+        include_raw_responses = self.config.output.get("include_raw_responses", True)
+        include_judge_responses = self.config.output.get("include_judge_responses", True)
+
+        # Build scores dict, converting TraitScore to serializable format
+        scores_data = {}
+        for trait, trait_score in single_score.get_scores().items():
+            scores_data[trait] = {
+                "score": trait_score.score,
+                "reasons": trait_score.reasons,
+            }
+
+        # Build scoring data
+        scoring_data = {
+            "prompt_id": single_score.prompt_id,
+            "prompt_text": single_score.prompt_text,
+            "constraint_name": single_score.constraint_name,
+            "response": single_score.response if include_raw_responses else None,
+            "scores": scores_data,
+            "judge_model": judge_model,
+            "judge_raw_response": single_score.judging_result.raw_response
+            if include_judge_responses
+            else None,
+            "timestamp": timestamp,
+        }
+
+        # Include error if present
+        if single_score.error:
+            scoring_data["error"] = single_score.error
+
+        # Write atomically with UTF-8 encoding
+        self._write_json_file(self.judging_dir, filename, scoring_data)
+
     def save_analysis(
         self,
         result: "EvaluationResult",
@@ -317,79 +373,144 @@ class RunOutputManager:
         Raises:
             PersistenceError: If analysis files cannot be written.
         """
+        import statistics
+
         timestamp = datetime.now().isoformat()
 
         # Get baseline constraint name
         baseline_constraint = self.config.baseline_constraint
         baseline_name = baseline_constraint.name if baseline_constraint else "baseline"
 
-        # Build summary.json
-        summary_data = {
-            "generated_at": timestamp,
-            "config_name": self.config.name,
-            "prompts_count": len(set(c.prompt_id for c in result.comparisons)),
-            "constraints_tested": list(analyses.keys()),
-            "baseline_constraint": baseline_name,
-            "results": {},
-        }
+        # Check if this is a single-score run (no comparisons, only single_scores)
+        is_single_score_run = not result.comparisons and result.single_scores
 
-        for constraint, analysis in analyses.items():
-            traits_data = {}
-            for trait_name, comp in analysis.trait_comparisons.items():
-                traits_data[trait_name] = {
-                    "baseline_mean": comp.baseline_mean,
-                    "test_mean": comp.test_mean,
-                    "mean_diff": comp.mean_diff,
-                    "p_value": comp.p_value,
-                    "effect_size": comp.effect_size,
-                    "effect_interpretation": comp.effect_interpretation,
-                    "significant": comp.significant,
+        if is_single_score_run:
+            # Build summary.json for single-score runs
+            valid_scores = [
+                s for s in result.single_scores if not s.error and not s.judging_result.error
+            ]
+
+            # Aggregate scores by trait
+            trait_scores: dict[str, list[int]] = {}
+            for single in valid_scores:
+                for trait, score in single.get_scores().items():
+                    if trait not in trait_scores:
+                        trait_scores[trait] = []
+                    trait_scores[trait].append(score.score)
+
+            # Calculate statistics for each trait
+            single_scores_data = {}
+            for trait, scores in trait_scores.items():
+                mean = sum(scores) / len(scores) if scores else 0
+                std = statistics.stdev(scores) if len(scores) > 1 else 0
+                single_scores_data[trait] = {
+                    "mean": round(mean, 2),
+                    "std": round(std, 2),
+                    "min": min(scores) if scores else 0,
+                    "max": max(scores) if scores else 0,
+                    "n": len(scores),
                 }
 
-            summary_data["results"][constraint] = {
-                "n_prompts": analysis.n_prompts,
-                "significant_improvements": analysis.improved_traits(),
-                "significant_degradations": analysis.degraded_traits(),
-                "traits": traits_data,
+            summary_data = {
+                "generated_at": timestamp,
+                "config_name": self.config.name,
+                "prompts_count": len(set(s.prompt_id for s in result.single_scores)),
+                "run_type": "single_score",
+                "constraint": baseline_name,
+                "single_scores": single_scores_data,
             }
 
-        # Build comparisons.json
-        comparisons_data = {
-            "generated_at": timestamp,
-            "comparisons": [],
-        }
+            # Build single_scores.json with per-prompt data
+            scores_data = {
+                "generated_at": timestamp,
+                "scores": [],
+            }
 
-        for comp in result.comparisons:
-            if comp.error or comp.judging_result.error:
-                continue
+            for single in valid_scores:
+                prompt_scores = {}
+                for trait, score in single.get_scores().items():
+                    prompt_scores[trait] = score.score
 
-            baseline_scores = {}
-            test_scores = {}
-            deltas = {}
+                scores_data["scores"].append(
+                    {
+                        "prompt_id": single.prompt_id,
+                        "constraint_name": single.constraint_name,
+                        "scores": prompt_scores,
+                    }
+                )
 
-            for trait, score in comp.get_baseline_scores().items():
-                baseline_scores[trait] = score.score
+            # Write files
+            self._write_analysis_file("summary.json", summary_data)
+            self._write_analysis_file("single_scores.json", scores_data)
+        else:
+            # Build summary.json for pairwise comparison runs
+            summary_data = {
+                "generated_at": timestamp,
+                "config_name": self.config.name,
+                "prompts_count": len(set(c.prompt_id for c in result.comparisons)),
+                "run_type": "comparison",
+                "constraints_tested": list(analyses.keys()),
+                "baseline_constraint": baseline_name,
+                "results": {},
+            }
 
-            for trait, score in comp.get_test_scores().items():
-                test_scores[trait] = score.score
+            for constraint, analysis in analyses.items():
+                traits_data = {}
+                for trait_name, comp in analysis.trait_comparisons.items():
+                    traits_data[trait_name] = {
+                        "baseline_mean": comp.baseline_mean,
+                        "test_mean": comp.test_mean,
+                        "mean_diff": comp.mean_diff,
+                        "p_value": comp.p_value,
+                        "effect_size": comp.effect_size,
+                        "effect_interpretation": comp.effect_interpretation,
+                        "significant": comp.significant,
+                    }
 
-            for trait in baseline_scores:
-                if trait in test_scores:
-                    deltas[trait] = test_scores[trait] - baseline_scores[trait]
-
-            comparisons_data["comparisons"].append(
-                {
-                    "prompt_id": comp.prompt_id,
-                    "test_constraint": comp.test_constraint,
-                    "baseline_scores": baseline_scores,
-                    "test_scores": test_scores,
-                    "deltas": deltas,
+                summary_data["results"][constraint] = {
+                    "n_prompts": analysis.n_prompts,
+                    "significant_improvements": analysis.improved_traits(),
+                    "significant_degradations": analysis.degraded_traits(),
+                    "traits": traits_data,
                 }
-            )
 
-        # Write both files atomically
-        self._write_analysis_file("summary.json", summary_data)
-        self._write_analysis_file("comparisons.json", comparisons_data)
+            # Build comparisons.json
+            comparisons_data = {
+                "generated_at": timestamp,
+                "comparisons": [],
+            }
+
+            for comp in result.comparisons:
+                if comp.error or comp.judging_result.error:
+                    continue
+
+                baseline_scores = {}
+                test_scores = {}
+                deltas = {}
+
+                for trait, score in comp.get_baseline_scores().items():
+                    baseline_scores[trait] = score.score
+
+                for trait, score in comp.get_test_scores().items():
+                    test_scores[trait] = score.score
+
+                for trait in baseline_scores:
+                    if trait in test_scores:
+                        deltas[trait] = test_scores[trait] - baseline_scores[trait]
+
+                comparisons_data["comparisons"].append(
+                    {
+                        "prompt_id": comp.prompt_id,
+                        "test_constraint": comp.test_constraint,
+                        "baseline_scores": baseline_scores,
+                        "test_scores": test_scores,
+                        "deltas": deltas,
+                    }
+                )
+
+            # Write both files atomically
+            self._write_analysis_file("summary.json", summary_data)
+            self._write_analysis_file("comparisons.json", comparisons_data)
 
     def _write_json_file(self, directory: Path, filename: str, data: dict) -> None:
         """Write a JSON file atomically with UTF-8 encoding.
@@ -464,10 +585,15 @@ class RunOutputManager:
         # SDK calls: prompts × constraints (0 for rejudge)
         total_sdk_calls = 0 if self._is_rejudge else prompts_count * n_constraints
 
-        # Judge calls: prompts × (constraints - 1 baseline)
-        # Each non-baseline constraint compared with baseline
+        # Judge calls: depends on whether we have test constraints or not
+        # If test constraints exist: prompts × (constraints - 1 baseline) for pairwise comparison
+        # If no test constraints (baseline only): prompts for single-response scoring
         n_test_constraints = len(self.config.test_constraints)
-        total_judge_calls = prompts_count * n_test_constraints
+        if n_test_constraints > 0:
+            total_judge_calls = prompts_count * n_test_constraints
+        else:
+            # Single-constraint run: each response gets scored individually
+            total_judge_calls = prompts_count * n_constraints
 
         # Rejudge-specific fields
         if self._is_rejudge and self._rejudge_source is not None:
@@ -537,6 +663,15 @@ class NullOutputManager:
     def save_judging(
         self,
         comparison: "PairedComparison",
+        judge_model: dict,
+        timestamp: str,
+    ) -> None:
+        """No-op."""
+        pass
+
+    def save_single_judging(
+        self,
+        single_score: "SingleResponseScore",
         judge_model: dict,
         timestamp: str,
     ) -> None:

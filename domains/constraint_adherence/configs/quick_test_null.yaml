@@ -1,0 +1,48 @@
+name: quick_test_null
+version: "1.0"
+description: |
+  Baseline test using null strategy - no system prompt.
+  Establishes baseline model behavior without CTN constraints.
+
+  With 19 prompts x 1 constraint = 19 API calls.
+
+runner:
+  type: sdk_http
+  base_url: "http://localhost:14380"
+  timeout: 60
+  strategy: "null"
+
+prompts:
+  source: prompts/prompts.yaml
+
+models:
+  - provider: anthropic
+    name: sonnet
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+
+constraints:
+  - name: baseline
+    input_prefix: ""
+    description: "Null strategy baseline - no system prompt"
+
+judge_models:
+  - provider: anthropic
+    name: sonnet
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+
+judging:
+  blind: true
+  traits_definition: definitions/traits.yaml
+
+execution:
+  strategy: full_cross
+  delay: 0.5
+
+output:
+  dir: results/
+  include_raw_responses: true
+  include_judge_responses: true

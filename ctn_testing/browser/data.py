@@ -91,6 +91,18 @@ class JudgingData:
     raw_response: str | None = None
 
 
+@dataclass
+class SingleScoreData:
+    """Data from a single-response scoring (baseline-only runs)."""
+
+    prompt_id: str
+    prompt_text: str
+    constraint_name: str
+    response: str
+    scores: dict[str, dict]  # {trait: {score, reasons}}
+    raw_response: str | None = None
+
+
 def parse_run_timestamp(run_id: str) -> datetime | None:
     """Parse timestamp from run_id format: YYYY-MM-DDTHH-MM-SS-ffffff"""
     try:
@@ -402,3 +414,54 @@ def get_unique_prompts(responses: list[ResponseData]) -> list[tuple[str, str]]:
 def get_unique_constraints(responses: list[ResponseData]) -> list[str]:
     """Get unique constraint names from responses."""
     return sorted(set(r.constraint_name for r in responses))
+
+
+def load_single_scores(run_path: Path) -> list[SingleScoreData]:
+    """Load all single-response scores from a run.
+
+    Single scores are stored in judging/*_single.json files.
+    """
+    scores = []
+    judging_dir = run_path / "judging"
+
+    if not judging_dir.exists():
+        return scores
+
+    for score_file in sorted(judging_dir.glob("*_single.json")):
+        try:
+            with open(score_file, encoding="utf-8") as f:
+                data = json.load(f)
+
+            scores.append(
+                SingleScoreData(
+                    prompt_id=data.get("prompt_id", ""),
+                    prompt_text=data.get("prompt_text", ""),
+                    constraint_name=data.get("constraint_name", ""),
+                    response=data.get("response", ""),
+                    scores=data.get("scores", {}),
+                    raw_response=data.get("judge_raw_response"),
+                )
+            )
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    return scores
+
+
+def get_analysis_summary(run_path: Path) -> dict:
+    """Load analysis/summary.json from run."""
+    summary_path = run_path / "analysis" / "summary.json"
+    if not summary_path.exists():
+        return {}
+
+    try:
+        with open(summary_path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, KeyError):
+        return {}
+
+
+def is_single_score_run(run_path: Path) -> bool:
+    """Check if this is a single-score run (baseline-only)."""
+    summary = get_analysis_summary(run_path)
+    return summary.get("run_type") == "single_score"

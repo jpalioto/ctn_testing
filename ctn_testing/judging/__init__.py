@@ -1,6 +1,6 @@
 """Blind judging infrastructure for constraint adherence evaluation."""
 
-from .blind_judge import BlindJudge, JudgingResult, TraitScore
+from .blind_judge import BlindJudge, JudgingResult, SingleResponseResult, TraitScore
 from .traits import TraitDefinitions, TraitDimension, load_traits
 
 __all__ = [
@@ -9,5 +9,6 @@ __all__ = [
     "load_traits",
     "TraitScore",
     "JudgingResult",
+    "SingleResponseResult",
     "BlindJudge",
 ]

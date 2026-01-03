@@ -28,6 +28,18 @@ class JudgingResult:
     error: str | None = None  # Parse error if any
 
 
+@dataclass
+class SingleResponseResult:
+    """Result of scoring a single response on absolute traits.
+
+    Used for baseline-only runs where there's no comparison response.
+    """
+
+    scores: dict[str, TraitScore] = field(default_factory=dict)
+    raw_response: str = ""  # For debugging
+    error: str | None = None  # Parse error if any
+
+
 class JudgingError(Exception):
     """Error during judging process."""
 
@@ -94,6 +106,40 @@ class BlindJudge:
             raise JudgingError(f"SDK error during judging: {e}") from e
 
         return self._parse_response(sdk_response.output)
+
+    def judge_single(
+        self,
+        response: str,
+        prompt_text: str,
+    ) -> SingleResponseResult:
+        """Score a single response on absolute trait dimensions.
+
+        Used for baseline-only runs where there's no comparison response.
+        Scores the response on absolute quality dimensions rather than
+        relative to another response.
+
+        Args:
+            response: Response to evaluate
+            prompt_text: Original prompt for context
+
+        Returns:
+            SingleResponseResult with scores for the response
+
+        Raises:
+            JudgingError: If SDK call fails
+        """
+        judge_prompt = self._build_single_judge_prompt(response, prompt_text)
+
+        try:
+            sdk_response = self.runner.send(
+                input=judge_prompt,
+                provider=self.judge_provider,
+                model=self.judge_model,
+            )
+        except SDKError as e:
+            raise JudgingError(f"SDK error during judging: {e}") from e
+
+        return self._parse_single_response(sdk_response.output)
 
     def _build_judge_prompt(
         self,
@@ -260,3 +306,78 @@ Return JSON only (no markdown, no extra text):
             )
 
         return scores
+
+    def _build_single_judge_prompt(
+        self,
+        response: str,
+        prompt_text: str,
+    ) -> str:
+        """Build the single-response judging prompt.
+
+        The prompt includes:
+        - The original question for context
+        - The response to evaluate
+        - All trait dimensions with descriptions and anchors
+        - Instructions for JSON output format
+        """
+        dimensions_text = self._format_dimensions()
+        dimension_names = self.traits.dimension_names()
+
+        # Build expected JSON structure for prompt
+        json_structure = self._build_single_json_template(dimension_names)
+
+        return f'''You are evaluating a response to a prompt on absolute quality dimensions.
+Score the response on each trait dimension provided.
+
+ORIGINAL PROMPT:
+"{prompt_text}"
+
+RESPONSE:
+"""
+{response}
+"""
+
+Score this response on these dimensions (0-100):
+
+{dimensions_text}
+
+For EACH dimension, provide a score and brief reasoning.
+Be consistent - the same quality should receive the same score across different responses.
+
+Return JSON only (no markdown, no extra text):
+{json_structure}'''
+
+    def _build_single_json_template(self, dimension_names: list[str]) -> str:
+        """Build JSON template for single-response scoring."""
+        dims = {name: {"score": "<0-100>", "reasons": ["...", "..."]} for name in dimension_names}
+        template = {"scores": dims}
+        return json.dumps(template, indent=2)
+
+    def _parse_single_response(self, raw_response: str) -> SingleResponseResult:
+        """Parse single-response judge output into structured result.
+
+        Handles:
+        - Valid JSON
+        - JSON wrapped in markdown code blocks
+        - Malformed JSON (returns error)
+        - Missing dimensions (fills with defaults)
+        """
+        result = SingleResponseResult(raw_response=raw_response)
+
+        # Try to extract JSON from response
+        json_str = self._extract_json(raw_response)
+        if json_str is None:
+            result.error = "No valid JSON found in response"
+            return result
+
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            result.error = f"JSON parse error: {e}"
+            return result
+
+        # Parse scores (handle both {"scores": {...}} and direct {...} formats)
+        scores_data = data.get("scores", data)
+        result.scores = self._parse_scores(scores_data, "response")
+
+        return result

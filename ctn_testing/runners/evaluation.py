@@ -11,7 +11,12 @@ from typing import Any, Callable
 import yaml
 
 # Import directly from module to avoid circular import through __init__.py
-from ..judging.blind_judge import BlindJudge, JudgingResult, TraitScore  # noqa: E402
+from ..judging.blind_judge import (  # noqa: E402
+    BlindJudge,
+    JudgingResult,
+    SingleResponseResult,
+    TraitScore,
+)
 from ..statistics.constraint_analysis import full_analysis  # noqa: E402
 from .constraint_runner import (
     ConstraintConfig,
@@ -43,7 +48,7 @@ def format_status(success: bool) -> str:
 class ProgressInfo:
     """Detailed progress information for callbacks."""
 
-    stage: str  # "running" or "judging"
+    stage: str  # "running", "judging", or "scoring"
     current: int
     total: int
     success: bool
@@ -56,6 +61,8 @@ class ProgressInfo:
     # Judge phase details
     baseline_constraint: str | None = None
     test_constraint: str | None = None
+    # Single-response scoring details
+    scores_compact: str | None = None  # e.g., "reas=75, prec=80, ..."
 
 
 # Type alias for progress callback
@@ -160,6 +167,33 @@ class PairedComparison:
 
 
 @dataclass
+class SingleResponseScore:
+    """Result of scoring a single response on absolute traits.
+
+    Used for baseline-only runs where there's no comparison.
+    """
+
+    prompt_id: str
+    prompt_text: str
+    constraint_name: str
+    response: str
+    judging_result: SingleResponseResult
+    error: str | None = None
+
+    def get_scores(self) -> dict[str, TraitScore]:
+        """Get the trait scores for this response."""
+        return self.judging_result.scores
+
+    def format_scores_compact(self) -> str:
+        """Format scores as compact string for progress output."""
+        scores = self.get_scores()
+        if not scores:
+            return ""
+        parts = [f"{name[:4]}={s.score}" for name, s in sorted(scores.items())[:4]]
+        return ", ".join(parts)
+
+
+@dataclass
 class EvaluationResult:
     """Result of a full constraint adherence evaluation."""
 
@@ -167,6 +201,7 @@ class EvaluationResult:
     timestamp: str
     run_results: list[RunResult] = field(default_factory=list)
     comparisons: list[PairedComparison] = field(default_factory=list)
+    single_scores: list[SingleResponseScore] = field(default_factory=list)
     run_dir: Path | None = None  # Output directory for this run
 
     def get_comparisons_for(self, constraint: str) -> list[PairedComparison]:
@@ -177,6 +212,13 @@ class EvaluationResult:
         """Get all comparisons for a specific prompt."""
         return [c for c in self.comparisons if c.prompt_id == prompt_id]
 
+    def get_single_score_for_prompt(self, prompt_id: str) -> SingleResponseScore | None:
+        """Get single-response score for a specific prompt."""
+        for s in self.single_scores:
+            if s.prompt_id == prompt_id:
+                return s
+        return None
+
     def summary(self) -> dict[str, Any]:
         """Generate summary statistics."""
         summary: dict[str, Any] = {
@@ -184,12 +226,14 @@ class EvaluationResult:
             "timestamp": self.timestamp,
             "total_runs": len(self.run_results),
             "total_comparisons": len(self.comparisons),
+            "total_single_scores": len(self.single_scores),
             "run_errors": len([r for r in self.run_results if r.error]),
             "comparison_errors": len([c for c in self.comparisons if c.error]),
+            "single_score_errors": len([s for s in self.single_scores if s.error]),
             "by_constraint": {},
         }
 
-        # Group by test constraint
+        # Group by test constraint (pairwise comparisons)
         constraints = set(c.test_constraint for c in self.comparisons)
         for constraint in constraints:
             comps = self.get_comparisons_for(constraint)
@@ -218,6 +262,26 @@ class EvaluationResult:
                     trait: sum(deltas) / len(deltas) for trait, deltas in trait_deltas.items()
                 },
             }
+
+        # Single-response scores summary (for baseline-only runs)
+        if self.single_scores:
+            valid_singles = [
+                s for s in self.single_scores if not s.error and not s.judging_result.error
+            ]
+            if valid_singles:
+                trait_scores: dict[str, list[int]] = {}
+                for single in valid_singles:
+                    for trait, score in single.get_scores().items():
+                        if trait not in trait_scores:
+                            trait_scores[trait] = []
+                        trait_scores[trait].append(score.score)
+
+                summary["single_scores"] = {
+                    "count": len(valid_singles),
+                    "trait_means": {
+                        trait: sum(scores) / len(scores) for trait, scores in trait_scores.items()
+                    },
+                }
 
         return summary
 
@@ -463,15 +527,26 @@ class ConstraintEvaluator:
                     f"Run error [{run_result.prompt_id}×{run_result.constraint_name}]: {run_result.error}"
                 )
 
-        # Phase 2: Compare baseline vs each test constraint
-        self._judge_phase(result, progress_callback)
+        # Phase 2: Judging
+        # If we have test constraints (non-baseline), do pairwise comparison
+        # Otherwise, do single-response scoring for baseline-only runs
+        if self.config.test_constraints:
+            self._judge_phase(result, progress_callback)
 
-        # Collect comparison errors
-        for comp in result.comparisons:
-            if comp.error:
-                errors.append(
-                    f"Judge error [{comp.prompt_id}×{comp.test_constraint}]: {comp.error}"
-                )
+            # Collect comparison errors
+            for comp in result.comparisons:
+                if comp.error:
+                    errors.append(
+                        f"Judge error [{comp.prompt_id}×{comp.test_constraint}]: {comp.error}"
+                    )
+        else:
+            # Single-constraint run (baseline only) - score each response individually
+            self._single_judge_phase(result, progress_callback)
+
+            # Collect single-score errors
+            for single in result.single_scores:
+                if single.error:
+                    errors.append(f"Score error [{single.prompt_id}]: {single.error}")
 
         # Phase 3: Run statistical analysis and save results
         analyses = full_analysis(result)
@@ -626,6 +701,113 @@ class ConstraintEvaluator:
                     duration_secs=duration,
                 )
                 _call_progress(progress_callback, info)
+
+    def _single_judge_phase(
+        self,
+        result: EvaluationResult,
+        progress_callback: Callable | None,
+    ) -> None:
+        """Score each response individually on absolute traits.
+
+        Used when there are no test constraints (baseline-only run).
+        Each response is scored on absolute trait dimensions.
+
+        Raises:
+            PersistenceError: If a scoring result cannot be saved (fail-fast).
+        """
+        total = len(result.run_results)
+        current = 0
+
+        # Get judge model config for saving
+        judge_config = self.config.judge_models[0] if self.config.judge_models else {}
+        judge_model = {
+            "provider": judge_config.get("provider", "anthropic"),
+            "name": judge_config.get("name", ""),
+        }
+
+        for run_result in result.run_results:
+            current += 1
+            start_time = time.time()
+
+            # Skip if response had an error
+            if run_result.error:
+                info = ProgressInfo(
+                    stage="scoring",
+                    current=current,
+                    total=total,
+                    success=False,
+                    error_msg=run_result.error,
+                    prompt_id=run_result.prompt_id,
+                    constraint_name=run_result.constraint_name,
+                    duration_secs=0.0,
+                )
+                _call_progress(progress_callback, info)
+                continue
+
+            # Get prompt text from input (remove any prefix)
+            prompt_text = run_result.input_sent
+
+            # Score the single response
+            single_score = self._score_single(
+                prompt_id=run_result.prompt_id,
+                prompt_text=prompt_text,
+                constraint_name=run_result.constraint_name,
+                response=run_result.output,
+            )
+            result.single_scores.append(single_score)
+
+            duration = time.time() - start_time
+
+            # Save scoring result to disk (fail-fast on error)
+            self._output_manager.save_single_judging(
+                single_score=single_score,
+                judge_model=judge_model,
+                timestamp=datetime.now().isoformat(),
+            )
+
+            success = single_score.error is None
+            scores_compact = single_score.format_scores_compact() if success else None
+
+            info = ProgressInfo(
+                stage="scoring",
+                current=current,
+                total=total,
+                success=success,
+                error_msg=single_score.error,
+                prompt_id=run_result.prompt_id,
+                prompt_text=prompt_text,
+                constraint_name=run_result.constraint_name,
+                duration_secs=duration,
+                scores_compact=scores_compact,
+            )
+            _call_progress(progress_callback, info)
+
+    def _score_single(
+        self,
+        prompt_id: str,
+        prompt_text: str,
+        constraint_name: str,
+        response: str,
+    ) -> SingleResponseScore:
+        """Score a single response on absolute trait dimensions."""
+        try:
+            judging_result = self.judge.judge_single(
+                response=response,
+                prompt_text=prompt_text,
+            )
+            error = judging_result.error
+        except Exception as e:
+            judging_result = SingleResponseResult(raw_response="", error=str(e))
+            error = str(e)
+
+        return SingleResponseScore(
+            prompt_id=prompt_id,
+            prompt_text=prompt_text,
+            constraint_name=constraint_name,
+            response=response,
+            judging_result=judging_result,
+            error=error,
+        )
 
     def _compare_pair(
         self,
@@ -1011,6 +1193,8 @@ if __name__ == "__main__":
                 print("Generating responses:")
             elif info.stage == "judging":
                 print("\nJudging responses:")
+            elif info.stage == "scoring":
+                print("\nScoring responses:")
             current_stage = info.stage
 
         index = f"[{info.current}/{info.total}]"
@@ -1033,11 +1217,22 @@ if __name__ == "__main__":
             prompt = truncate(info.prompt_text or "", 30)
             status = f"{GREEN}OK{RESET}" if info.success else f"{YELLOW}SKIP{RESET}"
             print(f"  {index} {baseline} vs @{test}: {prompt}... {status} {timing}")
+        elif info.stage == "scoring":
+            constraint = info.constraint_name or "baseline"
+            prompt = truncate(info.prompt_text or "", 30)
+            status = f"{GREEN}OK{RESET}" if info.success else f"{RED}ERROR{RESET}"
+            scores = f"(scores: {info.scores_compact})" if info.scores_compact else ""
+            print(f"  {index} {constraint}: {prompt}... {status} {scores} {timing}")
 
     evaluator = ConstraintEvaluator(config_path=config_path)
     result = evaluator.run(progress_callback=progress_callback)
 
     print()
-    print(f"Completed: {len(result.run_results)} responses, {len(result.comparisons)} comparisons")
+    if result.single_scores:
+        print(f"Completed: {len(result.run_results)} responses, {len(result.single_scores)} scored")
+    else:
+        print(
+            f"Completed: {len(result.run_results)} responses, {len(result.comparisons)} comparisons"
+        )
     if result.run_dir:
         print(f"Results saved to: {result.run_dir}")

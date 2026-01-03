@@ -18,11 +18,15 @@ from ctn_testing.browser.components import (
 from ctn_testing.browser.data import (
     ResponseData,
     RunSummary,
+    SingleScoreData,
+    get_analysis_summary,
     get_unique_constraints,
     get_unique_prompts,
+    is_single_score_run,
     list_runs,
     load_judgings,
     load_responses,
+    load_single_scores,
 )
 from ctn_testing.runners.evaluation import EvaluationResult
 from ctn_testing.statistics.constraint_analysis import format_report, full_analysis
@@ -44,6 +48,18 @@ def cached_load_responses(run_path: str):
 def cached_load_judgings(run_path: str):
     """Cached judging loading."""
     return load_judgings(Path(run_path))
+
+
+@st.cache_data
+def cached_load_single_scores(run_path: str):
+    """Cached single-score loading."""
+    return load_single_scores(Path(run_path))
+
+
+@st.cache_data
+def cached_get_analysis_summary(run_path: str):
+    """Cached analysis summary loading."""
+    return get_analysis_summary(Path(run_path))
 
 
 def render_summary_tab(
@@ -80,15 +96,55 @@ def render_summary_tab(
 def _render_analysis(run: RunSummary) -> None:
     """Render statistical analysis for a run."""
     try:
-        result = EvaluationResult.load(run.path)
-        if result.comparisons:
-            analyses = full_analysis(result)
-            report = format_report(analyses)
-            st.code(report, language=None)
+        # Check if this is a single-score run
+        summary = cached_get_analysis_summary(str(run.path))
+
+        if summary.get("run_type") == "single_score":
+            # Render single-score summary
+            _render_single_score_analysis(run, summary)
         else:
-            st.info("No judging comparisons available for analysis")
+            # Render comparison analysis
+            result = EvaluationResult.load(run.path)
+            if result.comparisons:
+                analyses = full_analysis(result)
+                report = format_report(analyses)
+                st.code(report, language=None)
+            else:
+                st.info("No judging comparisons available for analysis")
     except Exception as e:
         st.warning(f"Could not load analysis: {e}")
+
+
+def _render_single_score_analysis(run: RunSummary, summary: dict) -> None:
+    """Render analysis for single-score (baseline-only) runs."""
+    st.subheader("Single-Response Scoring Summary")
+
+    st.metric("Prompts Scored", summary.get("prompts_count", 0))
+    st.caption(f"Constraint: {summary.get('constraint', 'baseline')}")
+
+    single_scores = summary.get("single_scores", {})
+    if not single_scores:
+        st.info("No single-score data available")
+        return
+
+    # Build DataFrame for display
+    import pandas as pd
+
+    rows = []
+    for trait, stats in sorted(single_scores.items()):
+        rows.append(
+            {
+                "Trait": trait,
+                "Mean": f"{stats.get('mean', 0):.1f}",
+                "Std": f"{stats.get('std', 0):.1f}",
+                "Min": stats.get("min", 0),
+                "Max": stats.get("max", 0),
+                "N": stats.get("n", 0),
+            }
+        )
+
+    df = pd.DataFrame(rows)
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
 
 def render_responses_tab(
@@ -167,6 +223,12 @@ def render_scores_tab(
     constraint: str | None,
 ) -> None:
     """Render scores tab with judging results."""
+    # Check if this is a single-score run
+    if is_single_score_run(run_a.path):
+        _render_single_scores_tab(run_a, run_b, prompt_id, constraint)
+        return
+
+    # Original pairwise comparison logic
     judgings_a = cached_load_judgings(str(run_a.path))
 
     if not judgings_a:
@@ -233,6 +295,113 @@ def render_scores_tab(
                     st.code(judging_a.raw_response, language="json")
         else:
             st.warning(f"No judging found for {prompt_id} × {constraint}")
+
+
+def _render_single_scores_tab(
+    run_a: RunSummary,
+    run_b: RunSummary | None,
+    prompt_id: str | None,
+    constraint: str | None,
+) -> None:
+    """Render scores tab for single-score (baseline-only) runs."""
+    import pandas as pd
+
+    single_scores_a = cached_load_single_scores(str(run_a.path))
+
+    if not single_scores_a:
+        st.warning("No single-response scores found")
+        return
+
+    # If no prompt selected, show all scores in a table
+    if not prompt_id:
+        st.subheader("All Response Scores")
+
+        # Build rows for DataFrame
+        rows = []
+        for score in single_scores_a:
+            row = {
+                "Prompt": score.prompt_id[:20] + "..."
+                if len(score.prompt_id) > 20
+                else score.prompt_id
+            }
+            for trait, data in sorted(score.scores.items()):
+                if isinstance(data, dict):
+                    row[trait[:12]] = data.get("score", 0)
+                else:
+                    row[trait[:12]] = data
+            rows.append(row)
+
+        if rows:
+            df = pd.DataFrame(rows)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        return
+
+    # Find specific score
+    score_a = next(
+        (s for s in single_scores_a if s.prompt_id == prompt_id),
+        None,
+    )
+
+    if run_b and is_single_score_run(run_b.path):
+        single_scores_b = cached_load_single_scores(str(run_b.path))
+        score_b = next(
+            (s for s in single_scores_b if s.prompt_id == prompt_id),
+            None,
+        )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader(f"Run A ({run_a.strategy or 'unknown'})")
+            if score_a:
+                _render_single_score_detail(score_a)
+            else:
+                st.warning("No score found for this prompt")
+
+        with col2:
+            st.subheader(f"Run B ({run_b.strategy or 'unknown'})")
+            if score_b:
+                _render_single_score_detail(score_b)
+            else:
+                st.warning("No score found for this prompt")
+    else:
+        if score_a:
+            _render_single_score_detail(score_a)
+        else:
+            st.warning(f"No score found for {prompt_id}")
+
+
+def _render_single_score_detail(score: SingleScoreData) -> None:
+    """Render detailed view of a single-response score."""
+    import pandas as pd
+
+    st.markdown(f"**Prompt:** {score.prompt_text[:100]}...")
+
+    # Build scores table
+    rows = []
+    for trait, data in sorted(score.scores.items()):
+        if isinstance(data, dict):
+            rows.append(
+                {
+                    "Trait": trait,
+                    "Score": data.get("score", 0),
+                    "Reasons": ", ".join(data.get("reasons", [])) if data.get("reasons") else "",
+                }
+            )
+        else:
+            rows.append({"Trait": trait, "Score": data, "Reasons": ""})
+
+    if rows:
+        df = pd.DataFrame(rows)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+    # Show response
+    with st.expander("Show Response"):
+        st.markdown(score.response)
+
+    # Show raw judge response
+    if score.raw_response:
+        with st.expander("Show Raw Judge Response"):
+            st.code(score.raw_response, language="json")
 
 
 def render_errors_tab(run_a: RunSummary, run_b: RunSummary | None) -> None:
