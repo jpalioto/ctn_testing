@@ -1,0 +1,60 @@
+name: quick_test
+version: "1.0"
+description: |
+  Quick test with 5 representative constraints for faster iteration.
+  Tests: baseline, analytical, terse, creative, adversarial.
+
+  With 19 prompts x 5 constraints = 95 API calls.
+
+runner:
+  type: sdk_http
+  base_url: "http://localhost:14380"
+  timeout: 60
+  strategy: ctn-v2
+
+prompts:
+  source: prompts/prompts.yaml
+
+models:
+  - provider: anthropic
+    name: sonnet
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+
+constraints:
+  - name: baseline
+    input_prefix: ""
+    description: "Control - no constraint modifier"
+  - name: analytical
+    input_prefix: "@analytical "
+    description: "Step-by-step analytical reasoning"
+  - name: terse
+    input_prefix: "@terse "
+    description: "Maximally concise responses"
+  - name: creative
+    input_prefix: "@creative "
+    description: "Exploratory, creative responses"
+  - name: adversarial
+    input_prefix: "@adversarial "
+    description: "Counter mode with error correction"
+
+judge_models:
+  - provider: anthropic
+    name: sonnet
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.0
+    max_tokens: 2048
+
+judging:
+  blind: true
+  traits_definition: definitions/traits.yaml
+
+execution:
+  strategy: full_cross
+  delay: 0.5
+
+output:
+  dir: results/
+  include_raw_responses: true
+  include_judge_responses: true

@@ -84,6 +84,52 @@ def browse(results_dir: str, port: int, no_browser: bool):
         sys.exit(1)
 
 
+def _print_config_preamble(evaluator, sdk_url_override: str | None) -> None:
+    """Print configuration details before running evaluation."""
+    config = evaluator.config
+
+    # Strategy
+    strategy = config.runner.get("strategy", "operational")
+
+    # Provider/model
+    model_config = config.models[0] if config.models else {}
+    provider = model_config.get("provider", "anthropic")
+    model = model_config.get("name", "unknown")
+
+    # Constraints list
+    constraint_names = []
+    for c in config.constraints:
+        if c.name == "baseline" or c.input_prefix == "":
+            constraint_names.append("baseline")
+        else:
+            constraint_names.append(f"@{c.name}")
+    constraints_str = ", ".join(constraint_names)
+
+    # Prompt count
+    prompts_count = len(evaluator.prompts)
+
+    # Judge model
+    judge_config = config.judge_models[0] if config.judge_models else None
+    if judge_config:
+        judge_provider = judge_config.get("provider", "anthropic")
+        judge_model = judge_config.get("name", "unknown")
+        judge_str = f"{judge_provider} ({judge_model})"
+    else:
+        judge_str = "none"
+
+    # SDK URL
+    sdk_url = sdk_url_override or config.runner.get("base_url", "http://localhost:14380")
+
+    click.echo("Configuration:")
+    click.echo(f"  Strategy:    {strategy}")
+    click.echo(f"  Provider:    {provider} ({model})")
+    click.echo(f"  Constraints: {constraints_str}")
+    click.echo(f"  Prompts:     {prompts_count}")
+    click.echo(f"  Judge:       {judge_str}")
+    click.echo(f"  SDK URL:     {sdk_url}")
+    click.echo()
+
+
 @cli.command()
 @click.argument("config_path", type=click.Path(exists=True))
 @click.option("--sdk-url", default=None, help="Override SDK server URL")
@@ -199,6 +245,9 @@ def run(config_path: str, sdk_url: str | None, seed: int | None, quiet: bool):
             sdk_base_url=sdk_url,
             random_seed=seed,
         )
+
+        # Show configuration preamble
+        _print_config_preamble(evaluator, sdk_url)
 
         result = evaluator.run(progress_callback=progress_callback)
 
